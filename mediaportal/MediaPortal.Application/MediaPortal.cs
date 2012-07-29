@@ -130,6 +130,7 @@ public class MediaPortalApp : D3DApp, IRender
   private const int WM_ENDSESSION = 0x0016;
   private const int WM_DEVICECHANGE = 0x0219;
   private const int WM_QUERYENDSESSION = 0x0011;
+  private const int WM_ACTIVATEAPP = 0x001C;
   private const int PBT_APMQUERYSUSPEND = 0x0000;
   private const int PBT_APMQUERYSTANDBY = 0x0001;
   private const int PBT_APMQUERYSUSPENDFAILED = 0x0002;
@@ -1047,6 +1048,19 @@ public class MediaPortalApp : D3DApp, IRender
         tMouseClickTimer.Dispose();
         Application.ExitThread();
         Application.Exit();
+      }
+      else if (msg.Msg == WM_ACTIVATEAPP)
+      {
+          if (this.active && this.ready)
+          {
+            MinimizeToTray();
+            //OnDeactivate(EventArgs.Empty);
+          }
+          else if (!this.active && this.ready)
+          {
+            Restore();
+            //OnActivate(EventArgs.Empty)
+          }
       }
       else if (msg.Msg == WM_DEVICECHANGE)
       {

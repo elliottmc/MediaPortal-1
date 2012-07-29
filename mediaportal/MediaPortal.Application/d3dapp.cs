@@ -2790,6 +2790,25 @@ namespace MediaPortal
       }
     }
 
+    public void MinimizeToTray()
+    {
+        Log.Info("D3D: Minimizing to tray");
+        _fromTray = false;
+        Hide();
+        notifyIcon.Visible = true;
+        WindowState = FormWindowState.Minimized;
+        //Deactivate();
+        active = false;
+
+        bool fullScreenMode = Menu == null;
+        if (fullScreenMode && autoHideTaskbar)
+        {
+            Win32API.EnableStartBar(true);
+            Win32API.ShowStartBar(true);
+            Log.Info("D3D: Unhiding taskbar");
+        }
+    }
+
     protected void Exit_OnClick(Object sender, EventArgs e)
     {
       _shuttingDown = true;
