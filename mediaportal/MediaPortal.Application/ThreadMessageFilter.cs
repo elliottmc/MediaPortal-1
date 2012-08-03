@@ -55,7 +55,7 @@ namespace MediaPortal
         // Shows the window
         try
         {
-          owner.Restore();
+          owner.RestoreFromTray();
           return true;
         }
         catch {} // return false;
