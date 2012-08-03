@@ -120,7 +120,7 @@ namespace WindowPlugins.GUISettings
       {
         xmlwriter.SetValue("movieplayer", "skipsteps", labelCurrent.Label);
       }
-      g_Player.configLoaded = false;
+      g_Player.ConfigLoaded = false;
       Log.Info("GUISkipSteps: {0}", "reset g_player settings");
     }
 

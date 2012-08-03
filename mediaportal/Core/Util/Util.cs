@@ -1,6 +1,6 @@
-#region Copyright (C) 2005-2011 Team MediaPortal
+#region Copyright (C) 2005-2012 Team MediaPortal
 
-// Copyright (C) 2005-2011 Team MediaPortal
+// Copyright (C) 2005-2012 Team MediaPortal
 // http://www.team-mediaportal.com
 // 
 // MediaPortal is free software: you can redistribute it and/or modify
@@ -35,7 +35,6 @@ using System.Text;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.ServiceProcess;
 using System.Windows.Forms;
 using System.Xml;
 using MediaPortal.ExtensionMethods;
@@ -4114,6 +4113,31 @@ namespace MediaPortal.Util
     {
       Log.Info("Utils: Suspend system");
       WindowsController.ExitWindows(RestartOptions.Suspend, forceShutDown);
+    }
+
+    public static void RestartMePo()
+    {
+      File.Delete(Config.GetFile(Config.Dir.Config, "mediaportal.running"));
+      Log.Info("Restarting - saving settings...");
+      Settings.SaveCache();
+      Process restartScript = new Process();
+      restartScript.EnableRaisingEvents = false;
+      restartScript.StartInfo.WorkingDirectory = Config.GetFolder(Config.Dir.Base);
+      restartScript.StartInfo.FileName = Config.GetFile(Config.Dir.Base, @"restart.vbs");
+      Log.Debug("Restarting - executing script {0}", restartScript.StartInfo.FileName);
+      restartScript.Start();
+      try
+      {
+        // Maybe the scripting host is not available therefore do not wait infinitely.
+        if (!restartScript.HasExited)
+        {
+          restartScript.WaitForExit();
+        }
+      }
+      catch (Exception ex)
+      {
+        Log.Error("Restarting - WaitForExit: {0}", ex.Message);
+      }
     }
 
     public static string EncryptPin(string code)

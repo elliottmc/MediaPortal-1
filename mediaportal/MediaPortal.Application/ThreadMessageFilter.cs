@@ -1,6 +1,6 @@
-#region Copyright (C) 2005-2011 Team MediaPortal
+#region Copyright (C) 2005-2012 Team MediaPortal
 
-// Copyright (C) 2005-2011 Team MediaPortal
+// Copyright (C) 2005-2012 Team MediaPortal
 // http://www.team-mediaportal.com
 // 
 // MediaPortal is free software: you can redistribute it and/or modify
@@ -30,7 +30,7 @@ namespace MediaPortal
   /// </summary>
   public class ThreadMessageFilter : IMessageFilter
   {
-    private D3DApp owner;
+    private readonly D3DApp _owner;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ThreadMessageFilter"/> class.
@@ -38,7 +38,7 @@ namespace MediaPortal
     /// <param name="owner">The owner.</param>
     public ThreadMessageFilter(D3DApp owner)
     {
-      this.owner = owner;
+      _owner = owner;
     }
 
     /// <exclude/>
@@ -55,10 +55,11 @@ namespace MediaPortal
         // Shows the window
         try
         {
-          owner.RestoreFromTray();
+          _owner.RestoreFromTray();
           return true;
         }
-        catch {} // return false;
+        // ignore all errors
+        catch {}
       }
 
       return false;

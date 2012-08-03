@@ -350,7 +350,7 @@ namespace MediaPortal.ProcessPlugins.MiniDisplayPlugin.Drivers
                   string path = e.XplMsg.GetParam(1, "url").ToLower();
                   if (!(path.Equals(string.Empty) & g_Player.Paused))
                   {
-                    if (path.Equals(g_Player.currentFileName) & g_Player.Paused)
+                    if (path.Equals(g_Player.CurrentFileName) & g_Player.Paused)
                     {
                       g_Player.Pause();
                       if (this.DoDebug)
@@ -362,7 +362,7 @@ namespace MediaPortal.ProcessPlugins.MiniDisplayPlugin.Drivers
                       }
                       return;
                     }
-                    if (File.Exists(path) && !g_Player.currentFileName.Equals(path))
+                    if (File.Exists(path) && !g_Player.CurrentFileName.Equals(path))
                     {
                       GUIMessage message = new GUIMessage();
                       message.Message = GUIMessage.MessageType.GUI_MSG_PLAY_FILE;

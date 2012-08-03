@@ -919,25 +919,22 @@ namespace MediaPortal
       {
         Log.Error(ex);
         // If that failed, fall back to the reference rasterizer
-        if (deviceInfo.DevType == DeviceType.Hardware)
+        if (deviceInfo.DevType == DeviceType.Hardware && FindBestWindowedMode(false, true))
         {
-          if (FindBestWindowedMode(false, true))
-          {
-            Windowed = true;
+          Windowed = true;
 
-            // Make sure main window isn't topmost, so error message is visible
-            var currentClientSize = ClientSize;
-            Size = ClientSize;
-            SendToBack();
-            BringToFront();
-            ClientSize = currentClientSize;
-            TopMost = _alwaysOnTop;
+          // Make sure main window isn't topmost, so error message is visible
+          var currentClientSize = ClientSize;
+          Size = ClientSize;
+          SendToBack();
+          BringToFront();
+          ClientSize = currentClientSize;
+          TopMost = _alwaysOnTop;
 
-            // Let the user know we are switching from HAL to the reference rasterizer
-            HandleSampleException(null, ApplicationMessage.WarnSwitchToRef);
+          // Let the user know we are switching from HAL to the reference rasterizer
+          HandleSampleException(null, ApplicationMessage.WarnSwitchToRef);
 
-            InitializeEnvironment();
-          }
+          InitializeEnvironment();
         }
       }
     }
@@ -1024,27 +1021,22 @@ namespace MediaPortal
         strStack  = e.StackTrace;
       }
       Log.Error("D3D: Exception: {0} {1} {2}", strMsg, strSource, strStack);
-      if (ApplicationMessage.ApplicationMustExit == type)
+      switch (type)
       {
-        strMsg += "\n\nMediaPortal has to be closed.";
-        MessageBox.Show(strMsg, Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
-
-        // Close the window, which shuts down the app
-        if (IsHandleCreated)
-        {
-          Close();
-        }
-      }
-      else
-      {
-        if (ApplicationMessage.WarnSwitchToRef == type)
-        {
+        case ApplicationMessage.ApplicationMustExit:
+          strMsg += "\n\nMediaPortal has to be closed.";
+          MessageBox.Show(strMsg, Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+          if (IsHandleCreated)
+          {
+            Close();
+          }
+          break;
+        case ApplicationMessage.WarnSwitchToRef:
           strMsg = "\n\nSwitching to the reference rasterizer,\n";
-        }
-
-        strMsg += "a software device that implements the entire\n";
-        strMsg += "Direct3D feature set, but runs very slowly.";
-        MessageBox.Show(strMsg, Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+          strMsg += "a software device that implements the entire\n";
+          strMsg += "Direct3D feature set, but runs very slowly.";
+          MessageBox.Show(strMsg, Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+          break;
       }
     }
 
@@ -1156,7 +1148,7 @@ namespace MediaPortal
           VideoDatabase.GetMovieInfo(fileName, ref movieDetails);
           var idFile = VideoDatabase.GetFileId(fileName);
           var idMovie = VideoDatabase.GetMovieId(fileName);
-          if ((idMovie >= 0) && (idFile >= 0))
+          if (idMovie >= 0 && idFile >= 0)
           {
             g_Player.PlayDVD(fileName);
             if (g_Player.Playing)
@@ -1215,14 +1207,9 @@ namespace MediaPortal
         try
         {
 #endif
-        if ((GUIGraphicsContext.CurrentState == GUIGraphicsContext.State.LOST) || (ActiveForm != this) ||
-            (GUIGraphicsContext.SaveRenderCycles))
+        if (((GUIGraphicsContext.CurrentState == GUIGraphicsContext.State.LOST) || (ActiveForm != this) || (GUIGraphicsContext.SaveRenderCycles)) && !_fromTray)
         {
-          // Yield some CPU time to other processes if restoring from tray is not in progress
-          if (!_fromTray)
-          {
-            Thread.Sleep(100);
-          }
+          Thread.Sleep(100);
         }
         RecoverDevice();
         try
@@ -1244,7 +1231,7 @@ namespace MediaPortal
 		catch (Exception ee)
         {
           Log.Info("d3dapp: Exception {0}", ee);
-          MessageBox.Show("An exception has occurred.  MediaPortal has to be closed.\r\n\r\n" + ee.ToString(),
+          MessageBox.Show("An exception has occurred.  MediaPortal has to be closed.\r\n\r\n" + ee,
                           "Exception",
                           MessageBoxButtons.OK, MessageBoxIcon.Information);
           Close();
@@ -1322,7 +1309,7 @@ namespace MediaPortal
             }
             else
             {
-              Log.Warn("d3dapp: DirectX9Ex is lost or gpu hung --> Reinit of DX9Ex is needed.");
+              Log.Warn("d3dapp: DirectX9Ex is lost or GPU hung --> Reinit of DX9Ex is needed.");
               GUIGraphicsContext.DX9ExRealDeviceLost = true;
               InitializeEnvironment();
             }
@@ -1341,25 +1328,22 @@ namespace MediaPortal
         }
         GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.RUNNING;
 
-        if (RefreshRateChanger.RefreshRateChangePending)
+        if (RefreshRateChanger.RefreshRateChangePending && RefreshRateChanger.RefreshRateChangeStrFile.Length > 0)
         {
-          if (RefreshRateChanger.RefreshRateChangeStrFile.Length > 0)
+          RefreshRateChanger.RefreshRateChangePending = false;
+          if (RefreshRateChanger.RefreshRateChangeMediaType != RefreshRateChanger.MediaType.Unknown)
           {
-            RefreshRateChanger.RefreshRateChangePending = false;
-            if (RefreshRateChanger.RefreshRateChangeMediaType != RefreshRateChanger.MediaType.Unknown)
-            {
-              var t1 = (int)RefreshRateChanger.RefreshRateChangeMediaType;
-              var t2 = (g_Player.MediaType)t1;
-              g_Player.Play(RefreshRateChanger.RefreshRateChangeStrFile, t2);
-            }
-            else
-            {
-              g_Player.Play(RefreshRateChanger.RefreshRateChangeStrFile);
-            }
-            if ((g_Player.HasVideo || g_Player.HasViz) && RefreshRateChanger.RefreshRateChangeFullscreenVideo)
-            {
-              g_Player.ShowFullScreenWindow();
-            }
+            var t1 = (int) RefreshRateChanger.RefreshRateChangeMediaType;
+            var t2 = (g_Player.MediaType) t1;
+            g_Player.Play(RefreshRateChanger.RefreshRateChangeStrFile, t2);
+          }
+          else
+          {
+            g_Player.Play(RefreshRateChanger.RefreshRateChangeStrFile);
+          }
+          if ((g_Player.HasVideo || g_Player.HasViz) && RefreshRateChanger.RefreshRateChangeFullscreenVideo)
+          {
+            g_Player.ShowFullScreenWindow();
           }
         }
       }
@@ -2024,7 +2008,7 @@ namespace MediaPortal
       _contextMenu.MenuItems.Add(Resources.D3DApp_NotifyIcon_Restore, Restore_OnClick);
       _contextMenu.MenuItems.Add(Resources.D3DApp_NotifyIcon_Exit, ExitOnClick);
       _notifyIcon.Text = Resources.D3DApp_NotifyIcon_MediaPortal;
-      _notifyIcon.Icon = ((Icon)(resources.GetObject("_notifyIcon.Icon")));
+      _notifyIcon.Icon = ((Icon)(resources.GetObject("_notifyIcon.TrayIcon")));
       _notifyIcon.ContextMenu = _contextMenu;
       _notifyIcon.DoubleClick += Restore_OnClick;
       // 
@@ -2082,8 +2066,7 @@ namespace MediaPortal
     /// <param name="e">Event arguments</param>
     protected override void OnSizeChanged(EventArgs e)
     {
-      if (GUIGraphicsContext.IsDirectX9ExUsed() && Visible && !ResizeOngoing && !_toggleFullWindowed &&
-          !_ignoreNextResizeEvent && WindowState == _windowState)
+      if (GUIGraphicsContext.IsDirectX9ExUsed() && Visible && !ResizeOngoing && !_toggleFullWindowed && !_ignoreNextResizeEvent && WindowState == _windowState)
       {
         Log.Info("Main: OnSizeChanged - Resetting device");
         SwitchFullScreenOrWindowed(false);
@@ -2191,8 +2174,7 @@ namespace MediaPortal
       if (GUIGraphicsContext.IsDirectX9ExUsed())
       {
         // Window maximize / restore button pressed 
-        if (WindowState != _windowState &&
-            WindowState != FormWindowState.Minimized)
+        if (WindowState != _windowState && WindowState != FormWindowState.Minimized)
         {
           _windowState = WindowState;
           _ignoreNextResizeEvent = true;
@@ -2491,11 +2473,7 @@ namespace MediaPortal
       if (timeElapsed < GUIGraphicsContext.DesiredFrameTime)
       {
         var milliSecondsLeft = (((GUIGraphicsContext.DesiredFrameTime - timeElapsed) * 1000) / Stopwatch.Frequency);
-        if (milliSecondsLeft == 0)
-        {
-          milliSecondsLeft = 1;
-
-        }
+        milliSecondsLeft = milliSecondsLeft == 0 ? 1 : milliSecondsLeft;
         Thread.Sleep((int)milliSecondsLeft);
       }
     }
@@ -2659,19 +2637,10 @@ namespace MediaPortal
     /// <param name="specified"></param>
     protected override void SetBoundsCore(int x, int y, int width, int height, BoundsSpecified specified)
     {
-      var skipMessage = false;
       var newBounds = new Rectangle(x, y, width, height);
-      if (GUIGraphicsContext._useScreenSelector && Maximized)
+      if (GUIGraphicsContext._useScreenSelector && Maximized && !newBounds.Equals(GUIGraphicsContext.currentScreen.Bounds))
       {
-        if (!newBounds.Equals(GUIGraphicsContext.currentScreen.Bounds))
-        {
-          skipMessage = true;
-        }
-      }
-      if (skipMessage)
-      {
-        Log.Info("d3dapp: Screenselector: skipped SetBoundsCore {0} does not match {1}", newBounds.ToString(),
-                 GUIGraphicsContext.currentScreen.Bounds.ToString());
+        Log.Info("d3dapp: Screenselector: skipped SetBoundsCore {0} does not match {1}", newBounds.ToString(), GUIGraphicsContext.currentScreen.Bounds.ToString());
       }
       else
       {
@@ -2829,7 +2798,7 @@ namespace MediaPortal
   #region Native Methods
 
   /// <summary>
-  /// Will hold native methods which are interop'd
+  /// Will hold native methods
   /// </summary>
   public class NativeMethods
   {

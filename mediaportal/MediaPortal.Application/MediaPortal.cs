@@ -1365,32 +1365,7 @@ public class MediaPortalApp : D3DApp, IRender
         if (xmlreader.GetValueAsBool("general", "restartonresume", false))
         {
           Log.Info("Main: OnResume - prepare for restart!");
-          File.Delete(Config.GetFile(Config.Dir.Config, "mediaportal.running"));
-          Log.Info("Main: OnResume - saving settings...");
-          Settings.SaveCache();
-          var restartScript = new Process
-                                {
-                                  EnableRaisingEvents = false,
-                                  StartInfo =
-                                  {
-                                    WorkingDirectory = Config.GetFolder(Config.Dir.Base),
-                                    FileName = Config.GetFile(Config.Dir.Base, @"restart.vbs")
-                                  }
-                                };
-          Log.Debug("Main: OnResume - executing script {0}", restartScript.StartInfo.FileName);
-          restartScript.Start();
-          try
-          {
-            // Maybe the scripting host is not available therefore do not wait infinitely.
-            if (!restartScript.HasExited)
-            {
-              restartScript.WaitForExit();
-            }
-          }
-          catch (Exception ex)
-          {
-            Log.Error("Main: OnResume - WaitForExit: {0}", ex.Message);
-          }
+          Utils.RestartMePo();
         }
       }
       if (_startWithBasicHome && File.Exists(GUIGraphicsContext.GetThemedSkinFile(@"\basichome.xml")))
@@ -2452,34 +2427,6 @@ public class MediaPortalApp : D3DApp, IRender
           var homeMsg = new GUIMessage(GUIMessage.MessageType.GUI_MSG_GOTO_WINDOW, 0, 0, 0, (int)newHome, 0, null);
           GUIWindowManager.SendThreadMessage(homeMsg);
           return;
-        //exit Mediaportal
-        case Action.ActionType.ACTION_EXIT:
-          Log.Info("Main: Exit requested");
-          // is the minimize on GUI option set? If so, minimize to tray...
-          if (MinimizeOnGuiExit && !ShuttingDown)
-          {
-            if (WindowState != FormWindowState.Minimized)
-            {
-              Log.Info("Main: Minimizing to tray on GUI exit and restoring task bar");
-            }
-            MinimizeToTray(true);
-            if (g_Player.IsVideo || g_Player.IsTV || g_Player.IsDVD)
-            {
-              if (g_Player.Volume > 0)
-              {
-                Volume = g_Player.Volume;
-                g_Player.Volume = 0;
-              }
-              if (g_Player.Paused == false && !GUIGraphicsContext.IsVMR9Exclusive)
-              {
-                g_Player.Pause();
-              }
-            }
-            return;
-          }
-          GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.STOPPING;
-          return;
-
         case Action.ActionType.ACTION_MPRESTORE:
           {
             Log.Info("Main: Restore MP by action");
@@ -2504,7 +2451,7 @@ public class MediaPortalApp : D3DApp, IRender
           {
             // reboot
             Log.Info("Main: Reboot requested");
-            var okToChangePowermode = Math.Abs((action.fAmount1) - 1) < float.Epsilon;
+            var okToChangePowermode = action.fAmount1 == 1;
 
             if (!okToChangePowermode)
             {
@@ -2567,10 +2514,12 @@ public class MediaPortalApp : D3DApp, IRender
             {
               dlg.Reset();
               dlg.SetHeading(GUILocalizeStrings.Get(498)); //Menu
-              dlg.AddLocalizedString(1030); //PowerOff
-              dlg.AddLocalizedString(1031); //Reboot
+              dlg.AddLocalizedString(1057); //Exit MediaPortal
+              dlg.AddLocalizedString(1058); //Restart MediaPortal
               dlg.AddLocalizedString(1032); //Suspend
               dlg.AddLocalizedString(1049); //Hibernate
+              dlg.AddLocalizedString(1031); //Reboot
+              dlg.AddLocalizedString(1030); //PowerOff
               dlg.DoModal(GUIWindowManager.ActiveWindow);
               if (dlg.SelectedId < 0)
               {
@@ -2583,6 +2532,13 @@ public class MediaPortalApp : D3DApp, IRender
               }
               switch (dlg.SelectedId)
               {
+                case 1057:
+                  ExitMePo();
+                  return;
+                case 1058:
+                  GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.STOPPING;
+                  Utils.RestartMePo();
+                  break;
                 case 1030:
                   _restartOptions = RestartOptions.PowerOff;
                   _useRestartOptions = true;
@@ -2607,11 +2563,14 @@ public class MediaPortalApp : D3DApp, IRender
             }
             break;
           }
-
+        // exit MediaPortal
+        case Action.ActionType.ACTION_EXIT:
+          ExitMePo();
+          return;
         // stop radio
         case Action.ActionType.ACTION_STOP:
           break;
-        // Take screenshot
+        // Take screen shot
         case Action.ActionType.ACTION_TAKE_SCREENSHOT:
           {
             try
@@ -2791,6 +2750,34 @@ public class MediaPortalApp : D3DApp, IRender
     }
   }
 
+  private void ExitMePo()
+  {
+    Log.Info("Main: Exit requested");
+    // is the minimize on GUI option set? If so, minimize to tray...
+    if (MinimizeOnGuiExit && !ShuttingDown)
+    {
+      if (WindowState != FormWindowState.Minimized)
+      {
+        Log.Info("Main: Minimizing to tray on GUI exit and restoring task bar");
+        MinimizeToTray();
+      }
+      if (g_Player.IsVideo || g_Player.IsTV || g_Player.IsDVD)
+      {
+        if (g_Player.Volume > 0)
+        {
+          Volume = g_Player.Volume;
+          g_Player.Volume = 0;
+        }
+        if (g_Player.Paused == false && !GUIGraphicsContext.IsVMR9Exclusive)
+        {
+          g_Player.Pause();
+        }
+      }
+      return;
+    }
+    GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.STOPPING;
+  }
+  
   private static bool PromptUserBeforeChangingPowermode(Action action)
   {
     var msg = new GUIMessage(GUIMessage.MessageType.GUI_MSG_ASKYESNO, 0, 0, 0, 0, 0, 0);

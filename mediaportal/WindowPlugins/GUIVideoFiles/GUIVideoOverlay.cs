@@ -335,12 +335,12 @@ namespace MediaPortal.GUI.Video
       {
         // this is a recorded movie.
         // check the TVDatabase for the description,genre,title,...
-        if (g_Player.currentTitle != "")
+        if (g_Player.CurrentTitle != "")
         {
-          GUIPropertyManager.SetProperty("#Play.Current.Title", g_Player.currentTitle);
+          GUIPropertyManager.SetProperty("#Play.Current.Title", g_Player.CurrentTitle);
           GUIPropertyManager.SetProperty("#Play.Current.Plot",
-                                         g_Player.currentTitle + "\n" + g_Player.currentDescription);
-          GUIPropertyManager.SetProperty("#Play.Current.PlotOutline", g_Player.currentDescription);
+                                         g_Player.CurrentTitle + "\n" + g_Player.CurrentDescription);
+          GUIPropertyManager.SetProperty("#Play.Current.PlotOutline", g_Player.CurrentDescription);
         }
       }
 
