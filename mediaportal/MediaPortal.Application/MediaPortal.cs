@@ -1,6 +1,6 @@
-#region Copyright (C) 2005-2012 Team MediaPortal
+#region Copyright (C) 2005-2011 Team MediaPortal
 
-// Copyright (C) 2005-2012 Team MediaPortal
+// Copyright (C) 2005-2011 Team MediaPortal
 // http://www.team-mediaportal.com
 // 
 // MediaPortal is free software: you can redistribute it and/or modify
@@ -26,6 +26,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
+using System.Net.NetworkInformation;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security;
@@ -59,16 +60,13 @@ using Timer = System.Timers.Timer;
 
 namespace MediaPortal
 {
-  // ReSharper disable InconsistentNaming
+  [Flags]
   public enum EXECUTION_STATE : uint
-
-  public enum EXECUTION_STATE : uint
-    ES_SYSTEM_REQUIRED  = 0x00000001,
+  {
     ES_SYSTEM_REQUIRED = 0x00000001,
-    ES_CONTINUOUS       = 0x80000000
+    ES_DISPLAY_REQUIRED = 0x00000002,
     ES_CONTINUOUS = 0x80000000
-}
-// ReSharper restore InconsistentNaming
+  }
 }
 
 public class MediaPortalApp : D3DApp, IRender
@@ -79,38 +77,40 @@ public class MediaPortalApp : D3DApp, IRender
   private ApplicationUpdateManager _updater = null;
   private Thread _updaterThread = null;
   private const int UPDATERTHREAD_JOIN_TIMEOUT = 3 * 1000;
-  private int _lastMousePositionX;
-  private int _lastMousePositionY;
-  private bool _playingState;
-  private bool _showStats;
-  private bool _showStatsPrevious;
-  private readonly Rectangle[] _region;
-  private int _xpos;
-  private int _frameCount;
-  private SerialUIR _serialuirdevice;
-  private USBUIRT _usbuirtdevice;
-  private WinLirc _winlircdevice;
-  private RedEye _redeyedevice;
-  private readonly bool _useScreenSaver;
-  private readonly bool _useIdleblankScreen;
-  private static bool _isWinScreenSaverInUse;
-  private readonly int _timeScreenSaver;
-  private bool _restoreTopMost;
-  private bool _startWithBasicHome;
-  private bool _useOnlyOneHome;
-  private bool _suspended;
-  private bool _runAutomaticResume;
-  private bool _ignoreContextMenuAction;
-  private DateTime _lastContextMenuAction;
-  private bool _onResumeRunning;
-  private bool _onResumeAutomaticRunning;
-  protected string DateFormat;
-  protected bool UseLongDateFormat;
-  private readonly bool _showLastActiveModule;
-  private readonly int _suspendGracePeriodSec;
-  private static bool _mpCrashed;
-  private static int _startupDelay;
-  private static bool _waitForTvServer;
+#endif
+  private int m_iLastMousePositionX = 0;
+  private int m_iLastMousePositionY = 0;
+  private bool m_bPlayingState = false;
+  private bool m_bShowStats = false;
+  private bool m_bShowStatsPrevious = false;
+  private Rectangle[] region = new Rectangle[1];
+  private int m_ixpos = 50;
+  private int m_iFrameCount = 0;
+  private SerialUIR serialuirdevice = null;
+  private USBUIRT usbuirtdevice;
+  private WinLirc winlircdevice; //sd00//
+  private RedEye redeyedevice; //PB00//
+  private bool useScreenSaver = true;
+  private bool useIdleblankScreen = false;
+  private static bool isWinScreenSaverInUse = false;
+  private int timeScreenSaver = 300;
+  private bool restoreTopMost = false;
+  private bool _startWithBasicHome = false;
+  private bool _useOnlyOneHome = false;
+  private bool _suspended = false;
+  private bool _runAutomaticResume = false;
+  private bool ignoreContextMenuAction = false;
+  private DateTime lastContextMenuAction = DateTime.MaxValue;
+  private bool _onResumeRunning = false;
+  private bool _onResumeAutomaticRunning = false;
+  protected string _dateFormat = string.Empty;
+  protected bool _useLongDateFormat = false;
+  private bool showLastActiveModule = false;
+  private int _suspendGracePeriodSec = 5;
+  private int lastActiveModule = -1;
+  private bool lastActiveModuleFullscreen = false;
+  private static bool _mpCrashed = false;
+  private static int _startupDelay = 0;
   private static bool _waitForTvServer = false;
   private static DateTime _lastOnresume = DateTime.Now;
   private static string _alternateConfig = string.Empty;
@@ -119,49 +119,47 @@ public class MediaPortalApp : D3DApp, IRender
   string m_strNewVersion = "";
   bool m_bNewVersionAvailable = false;
   bool m_bCancelVersion = false;
-  private MouseEventArgs _lastMouseClickEvent;
-  private Timer _mouseClickTimer;
-  private bool _mouseClickFired;
-  // ReSharper disable InconsistentNaming
-  private const int WM_SYSCOMMAND             = 0x0112;
-  private const int WM_POWERBROADCAST         = 0x0218;
-  private const int WM_ENDSESSION             = 0x0016;
-  private const int WM_DEVICECHANGE           = 0x0219;
-  private const int WM_QUERYENDSESSION        = 0x0011;
-  private const int WM_NULL                   = 0x0000;
-  private const int WM_ACTIVATE               = 0x0006; // http://msdn.microsoft.com/en-us/library/windows/desktop/ms646274(v=vs.85).aspx
-  private const int WM_ACTIVATEAPP            = 0x001C; // http://msdn.microsoft.com/en-us/library/windows/desktop/ms632614(v=vs.85).aspx
-  private const int PBT_APMQUERYSUSPEND       = 0x0000;
-  private const int PBT_APMQUERYSTANDBY       = 0x0001;
+#endif
+  private MouseEventArgs eLastMouseClickEvent = null;
+  private Timer tMouseClickTimer = null;
+  private bool bMouseClickFired = false;
+  private const int WM_NCACTIVATE = 0x0086;
+  private const int WM_SYSCOMMAND = 0x0112;
+  private const int WM_POWERBROADCAST = 0x0218;
+  private const int WM_ENDSESSION = 0x0016;
+  private const int WM_DEVICECHANGE = 0x0219;
+  private const int WM_QUERYENDSESSION = 0x0011;
+  private const int PBT_APMQUERYSUSPEND = 0x0000;
   private const int PBT_APMQUERYSTANDBY = 0x0001;
   private const int PBT_APMQUERYSUSPENDFAILED = 0x0002;
-  private const int PBT_APMSUSPEND            = 0x0004;
-  private const int PBT_APMSTANDBY            = 0x0005;
-  private const int PBT_APMRESUMECRITICAL     = 0x0006;
-  private const int PBT_APMRESUMESUSPEND      = 0x0007;
-  private const int PBT_APMRESUMESTANDBY      = 0x0008;
-  private const int PBT_APMRESUMEAUTOMATIC    = 0x0012;
-  private const int SC_SCREENSAVE             = 0xF140;
-  private const int SC_MONITORPOWER           = 0xF170;
-  private const int SPI_SETSCREENSAVEACTIVE   = 17;
-  private const int SPI_GETSCREENSAVEACTIVE   = 16;
-  private const int SPIF_SENDWININICHANGE     = 0x0002;
-  private const int GPU_HUNG                  = -2005530508;
-  private const int D3DERR_INVALIDCALL        = -2005530516;
-  private const int GPU_REMOVED               = -2005530512;
-  // ReSharper restore InconsistentNaming
-  private const string Mutex = "{E0151CBA-7F81-41df-9849-F5298A779EB3}";
-  private bool _supportsFiltering;
-  private bool _supportsAlphaBlend;
-  private int _anisotropy;
-  private DateTime _updateTimer = DateTime.MinValue;
-  private static SplashScreen _splashScreen;
+  private const int PBT_APMQUERYSTANDBYFAILED = 0x0003;
+  private const int PBT_APMSUSPEND = 0x0004;
+  private const int PBT_APMSTANDBY = 0x0005;
+  private const int PBT_APMRESUMECRITICAL = 0x0006;
+  private const int PBT_APMRESUMESUSPEND = 0x0007;
+  private const int PBT_APMRESUMESTANDBY = 0x0008;
+  private const int PBT_APMRESUMEAUTOMATIC = 0x0012;
+  private const int BROADCAST_QUERY_DENY = 0x424D5144;
+  private const int SC_SCREENSAVE = 0xF140;
+  private const int SC_MONITORPOWER = 0xF170;
+  private const int SPI_SETSCREENSAVEACTIVE = 17;
+  private const int SPI_GETSCREENSAVEACTIVE = 16;
+  private const int SPIF_SENDWININICHANGE = 0x0002;
+  private const string mpMutex = "{E0151CBA-7F81-41df-9849-F5298A779EB3}";
+  private const string configMutex = "{0BFD648F-A59F-482A-961B-337D70968611}";
+  private const int GPU_HUNG = -2005530508;
+  private const int D3DERR_INVALIDCALL = -2005530516;
+  private const int GPU_REMOVED = -2005530512;
+  private bool supportsFiltering = false;
+  private bool bSupportsAlphaBlend = false;
+  private int g_nAnisotropy;
+  private DateTime m_updateTimer = DateTime.MinValue;
+  private int m_iDateLayout;
   private static SplashScreen splashScreen;
 #if !DEBUG
   private static bool _avoidVersionChecking;
 #endif
-  private string _outdatedSkinName;
-  private int _lastMessage = WM_NULL;
+  private bool _resetOnResize;
   private string _OutdatedSkinName = null;
 
   #endregion
@@ -174,15 +172,15 @@ public class MediaPortalApp : D3DApp, IRender
 
   [DllImport("Kernel32.DLL")]
   private static extern EXECUTION_STATE SetThreadExecutionState(EXECUTION_STATE state);
-  private static RestartOptions _restartOptions = RestartOptions.Reboot;
-  private static bool _useRestartOptions;
+
+  private static RestartOptions restartOptions = RestartOptions.Reboot;
   private static bool useRestartOptions = false;
 
-  private static extern bool PathIsNetworkPath(string path);
+  [DllImport("shlwapi.dll")]
   private static extern bool PathIsNetworkPath(string Path);
 
   #region main()
-  //NProf doesn't work if the [STAThread] attribute is set
+
   //NProf doesnt work if the [STAThread] attribute is set
   //but is needed when you want to play music or video
   [STAThread]
@@ -190,21 +188,21 @@ public class MediaPortalApp : D3DApp, IRender
   {
     Thread.CurrentThread.Name = "MPMain";
     if (args.Length > 0)
-      foreach (var arg in args)
+    {
       foreach (string arg in args)
       {
         if (arg == "/fullscreen")
-          FullscreenOverride = true;
+        {
           _fullscreenOverride = true;
         }
         if (arg == "/windowed")
-          WindowedOverride = true;
+        {
           _windowedOverride = true;
         }
         if (arg.StartsWith("/fullscreen="))
-          var argValue = arg.Remove(0, 12); // remove /?= from the argument  
-          FullscreenOverride |= argValue != "no";
-          WindowedOverride |= argValue.Equals("no");
+        {
+          string argValue = arg.Remove(0, 12); // remove /?= from the argument  
+          _fullscreenOverride |= argValue != "no";
           _windowedOverride |= argValue.Equals("no");
         }
         if (arg == "/crashtest")
@@ -213,16 +211,16 @@ public class MediaPortalApp : D3DApp, IRender
         }
         if (arg.StartsWith("/screen="))
         {
-          var screenarg = arg.Remove(0, 8); // remove /?= from the argument          
-          if (!int.TryParse(screenarg, out ScreenNumberOverride))
+          GUIGraphicsContext._useScreenSelector = true;
+          string screenarg = arg.Remove(0, 8); // remove /?= from the argument          
           if (!int.TryParse(screenarg, out _screenNumberOverride))
-            ScreenNumberOverride = -1;
+          {
             _screenNumberOverride = -1;
           }
         }
         if (arg.StartsWith("/skin="))
-          var skinOverrideArg = arg.Remove(0, 6); // remove /?= from the argument
-          StrSkinOverride = skinOverrideArg;
+        {
+          string skinOverrideArg = arg.Remove(0, 6); // remove /?= from the argument
           _strSkinOverride = skinOverrideArg;
         }
         if (arg.StartsWith("/config="))
@@ -279,8 +277,8 @@ public class MediaPortalApp : D3DApp, IRender
     }
 
     if (!Config.DirsFileUpdateDetected)
-      //check if Mediaportal has been configured
-      var fi = new FileInfo(MPSettings.ConfigPathName);
+    {
+      //check if mediaportal has been configured
       FileInfo fi = new FileInfo(MPSettings.ConfigPathName);
       if (!File.Exists(MPSettings.ConfigPathName) || (fi.Length < 10000))
       {
@@ -293,71 +291,63 @@ public class MediaPortalApp : D3DApp, IRender
         catch {} // no exception logging needed, since MP is now closed
         return;
       }
-      bool autoHideTaskbar;
-#if !DEBUG
-      bool watchdogEnabled;
-      bool restartOnError;
-      int restartDelay;
-#endif
+
+      bool autoHideTaskbar = true;
+      bool watchdogEnabled = true;
+      bool restartOnError = false;
       int restartDelay = 10;
-        var treadPriority = xmlreader.GetValueAsString("general", "ThreadPriority", "Normal");
-        switch (treadPriority)
+      using (Settings xmlreader = new MPSettings())
+      {
+        string MPThreadPriority = xmlreader.GetValueAsString("general", "ThreadPriority", "Normal");
+        if (MPThreadPriority == "AboveNormal")
         {
-          case "AboveNormal":
-            Thread.CurrentThread.Priority = ThreadPriority.AboveNormal;
-            Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.AboveNormal;
-            break;
-          case "High":
-            Thread.CurrentThread.Priority = ThreadPriority.Highest;
-            Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.High;
-            break;
-          case "BelowNormal":
-            Thread.CurrentThread.Priority = ThreadPriority.BelowNormal;
-            Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.BelowNormal;
-            break;
+          Thread.CurrentThread.Priority = ThreadPriority.AboveNormal;
+          Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.AboveNormal;
+        }
+        else if (MPThreadPriority == "High")
+        {
+          Thread.CurrentThread.Priority = ThreadPriority.Highest;
+          Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.High;
+        }
+        else if (MPThreadPriority == "BelowNormal")
+        {
           Thread.CurrentThread.Priority = ThreadPriority.BelowNormal;
           Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.BelowNormal;
         }
         autoHideTaskbar = xmlreader.GetValueAsBool("general", "hidetaskbar", false);
+        _startupDelay = xmlreader.GetValueAsBool("general", "delay startup", false)
+                          ? xmlreader.GetValueAsInt("general", "delay", 0)
+                          : 0;
         _waitForTvServer = xmlreader.GetValueAsBool("general", "wait for tvserver", false);
-#if !DEBUG
         watchdogEnabled = xmlreader.GetValueAsBool("general", "watchdogEnabled", true);
-        restartOnError = xmlreader.GetValueAsBool("general", "restartOnError", false);
-        restartDelay = xmlreader.GetValueAsInt("general", "restart delay", 10);
-#endif
         restartOnError = xmlreader.GetValueAsBool("general", "restartOnError", false);
         restartDelay = xmlreader.GetValueAsInt("general", "restart delay", 10);        
 
         GUIGraphicsContext._useScreenSelector |= xmlreader.GetValueAsBool("screenselector", "usescreenselector", false);
       }
 #if !DEBUG
-        // BAV: fixing mantis 1216: Watcher process uses a wrong folder for integrity file
-        using (var sw = new StreamWriter(Config.GetFile(Config.Dir.Config, "mediaportal.running"), false))
+      AddExceptionHandler();
+      if (watchdogEnabled)
       {
         //StreamWriter sw = new StreamWriter(Application.StartupPath + "\\mediaportal.running", false);
         // BAV: fixing mantis bug 1216: Watcher process uses a wrong folder for integrity file
         using (StreamWriter sw = new StreamWriter(Config.GetFile(Config.Dir.Config, "mediaportal.running"), false))
         {
-        var cmdargs = "-watchdog";
+          sw.WriteLine("running");
           sw.Close();
         }
-          cmdargs += " -restartMP " + restartDelay;
+        Log.Info("Main: Starting MPWatchDog");
         string cmdargs = "-watchdog";
-        var mpWatchDog = new Process
-                           {
-                             StartInfo =
-                               {
-                                 ErrorDialog = true,
-                                 UseShellExecute = true,
-                                 WorkingDirectory = Application.StartupPath,
-                                 FileName = "WatchDog.exe",
-                                 Arguments = cmdargs
-                               }
-                           };
+        if (restartOnError)
+        {
+          cmdargs += " -restartMP " + restartDelay.ToString();
+        }
+        Process mpWatchDog = new Process();
+        mpWatchDog.StartInfo.ErrorDialog = true;
         mpWatchDog.StartInfo.UseShellExecute = true;
         mpWatchDog.StartInfo.WorkingDirectory = Application.StartupPath;
         mpWatchDog.StartInfo.FileName = "WatchDog.exe";
-      var versionInfo = FileVersionInfo.GetVersionInfo(Application.ExecutablePath);
+        mpWatchDog.StartInfo.Arguments = cmdargs;
         mpWatchDog.Start();
       }
 #endif
@@ -371,28 +361,28 @@ public class MediaPortalApp : D3DApp, IRender
 #else
       Log.Info("Build: " + Application.ProductVersion);
 #endif
-      var lastSuccessTime = "NEVER !!!";
-      UIntPtr res;
+
+      //Check for unsupported operating systems
       OSPrerequisites.OSPrerequisites.OsCheck(false);
-      var options = Convert.ToInt32(Reg.RegistryRights.ReadKey);
+
       //Log last install of WindowsUpdate patches
       string LastSuccessTime = "NEVER !!!";
       UIntPtr res = UIntPtr.Zero;
 
-      var rKey = new UIntPtr(Convert.ToUInt32(Reg.RegistryRoot.HKLM));
-      int lastError;
-      var retval = Reg.RegOpenKeyEx(rKey,
+      int options = Convert.ToInt32(Reg.RegistryRights.ReadKey);
+      if (OSInfo.OSInfo.OsVersionInt() >= 52)
+      {
         options = options | Convert.ToInt32(Reg.RegWow64Options.KEY_WOW64_64KEY);
       }
       UIntPtr rKey = new UIntPtr(Convert.ToUInt32(Reg.RegistryRoot.HKLM));
       int lastError = 0;
       int retval = Reg.RegOpenKeyEx(rKey,
                                     "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update\\Results\\Install",
-        var sKey = new System.Text.StringBuilder((int)lKey);
+                                    0, options, out res);
       if (retval == 0)
       {
         uint tKey;
-          lastSuccessTime = sKey.ToString();
+        uint lKey = 100;
         System.Text.StringBuilder sKey = new System.Text.StringBuilder((int)lKey);
         retval = Reg.RegQueryValueEx(res, "LastSuccessTime", 0, out tKey, sKey, ref lKey);
         if (retval == 0)
@@ -405,7 +395,7 @@ public class MediaPortalApp : D3DApp, IRender
           Log.Debug("RegQueryValueEx retval=<{0}>, lastError=<{1}>", retval, lastError);
         }
       }
-      Log.Info("Main: Last install from WindowsUpdate is dated {0}", lastSuccessTime);
+      else
       {
         lastError = Marshal.GetLastWin32Error();
         Log.Debug("RegOpenKeyEx retval=<{0}>, lastError=<{1}>", retval, lastError);
@@ -420,9 +410,9 @@ public class MediaPortalApp : D3DApp, IRender
       }
 
       //Start MediaPortal
-      var mpFi = new FileInfo(Assembly.GetExecutingAssembly().Location);
+      Log.Info("Main: Using Directories:");
       foreach (Config.Dir option in Enum.GetValues(typeof (Config.Dir)))
-      using (var processLock = new ProcessLock(Mutex))
+      {
         Log.Info("{0} - {1}", option, Config.GetFolder(option));
       }
       FileInfo mpFi = new FileInfo(Assembly.GetExecutingAssembly().Location);
@@ -432,24 +422,22 @@ public class MediaPortalApp : D3DApp, IRender
         if (processLock.AlreadyExists)
         {
           Log.Warn("Main: MediaPortal is already running");
-        var applicationPath = Application.ExecutablePath;
+          Win32API.ActivatePreviousInstance();
         }
         Application.EnableVisualStyles();
-        if (!string.IsNullOrEmpty(applicationPath))
-        {
-          Directory.SetCurrentDirectory(applicationPath);
-          Log.Info("Main: Set current directory to: {0}", applicationPath);
-        }
-        //Localization strings for new splash screen and for MediaPortal itself
+        Application.SetCompatibleTextRenderingDefault(false);
+        //Set current directory
+        string applicationPath = Application.ExecutablePath;
+        applicationPath = Path.GetFullPath(applicationPath);
         applicationPath = Path.GetDirectoryName(applicationPath);
         Directory.SetCurrentDirectory(applicationPath);
-        // Initialize the skin and theme prior to beginning the splash screen thread. This provides for the splash screen to be used in a theme.
-        string strSkin;
+        Log.Info("Main: Set current directory to: {0}", applicationPath);
+
         //Localization strings for new splashscreen and for MediaPortal itself
         LoadLanguageString();
 
         // Initialize the skin and theme prior to beginning the splash screen thread.  This provides for the splash screen to be used in a theme.
-            strSkin = StrSkinOverride.Length > 0 ? StrSkinOverride : xmlreader.GetValueAsString("skin", "name", "Default");
+        string strSkin = "";
         try
         {
           using (Settings xmlreader = new MPSettings())
@@ -461,24 +449,28 @@ public class MediaPortalApp : D3DApp, IRender
         {
           strSkin = "Default";
         }
-        var msg = new GUIMessage(GUIMessage.MessageType.GUI_MSG_SKIN_CHANGED, 0, 0, 0, 0, 0, null);
+        Config.SkinName = strSkin;
         GUIGraphicsContext.Skin = strSkin;
         SkinSettings.Load();
 
         // Send a message that the skin has changed.
-//#if !DEBUG
-        var version = ConfigurationManager.AppSettings["version"];
-        _splashScreen = new SplashScreen {Version = version};
-        _splashScreen.Run();
-//#endif
+        GUIMessage msg = new GUIMessage(GUIMessage.MessageType.GUI_MSG_SKIN_CHANGED, 0, 0, 0, 0, 0, null);
+        GUIGraphicsContext.SendMessage(msg);
+
+        Log.Info("Main: Skin is {0} using theme {1}", strSkin, GUIThemeManager.CurrentTheme);
+
+#if !DEBUG
+        string version = ConfigurationManager.AppSettings["version"];
+        //ClientApplicationInfo clientInfo = ClientApplicationInfo.Deserialize("MediaPortal.exe.config");
         splashScreen = new SplashScreen();
         splashScreen.Version = version;
         splashScreen.Run();
         //clientInfo=null;
-          ServiceController ctrl;
+#endif
         Application.DoEvents();
         if (_waitForTvServer)
         {
+          Log.Debug("Main: Wait for TV service requested. Checking if installed...");
           ServiceController ctrl = null;
           try
           {
@@ -488,9 +480,9 @@ public class MediaPortalApp : D3DApp, IRender
           catch (Exception)
           {
             ctrl = null;
-            if (_splashScreen != null)
+            Log.Debug("Main: TV service not installed - proceeding...");
           }
-              _splashScreen.SetInformation(GUILocalizeStrings.Get(60)); // Waiting for startup of TV service...
+          if (ctrl != null)
           {
             Log.Debug("Main: TV service found. Checking status...");
             if (splashScreen != null)
@@ -532,11 +524,12 @@ public class MediaPortalApp : D3DApp, IRender
             Log.Info("Main: TV service is in status {0} - proceeding...", ctrl.Status.ToString());
             ctrl.Close();
           }
-          for (var i = _startupDelay; i > 0; i--)
+        }
         Application.DoEvents();
-            if (_splashScreen != null)
+        if (_startupDelay > 0)
         {
-              _splashScreen.SetInformation(String.Format(GUILocalizeStrings.Get(61), i));
+          Log.Info("Main: Waiting {0} second(s) before startup", _startupDelay);
+          for (int i = _startupDelay; i > 0; i--)
           {
             if (splashScreen != null)
             {
@@ -545,17 +538,18 @@ public class MediaPortalApp : D3DApp, IRender
             }
             Application.DoEvents();
             Thread.Sleep(1000);
+          }
         }
         Log.Debug("Main: Checking prerequisites");
         try
-            var strLine = "Please install a newer DirectX 9.0c redist!\r\n";
+        {
           // CHECK if DirectX 9.0c if installed
           Log.Debug("Main: Verifying DirectX 9");
           if (!DirectXCheck.IsInstalled())
-            if (_splashScreen != null)
+          {
             string strLine = "Please install a newer DirectX 9.0c redist!\r\n";
-              _splashScreen.Stop();
-              _splashScreen = null;
+            strLine = strLine + "MediaPortal cannot run without DirectX 9.0c redist (August 2008)\r\n";
+            strLine = strLine + "http://install.team-mediaportal.com/DirectX";
 #if !DEBUG
             if (splashScreen != null)
             {
@@ -564,11 +558,11 @@ public class MediaPortalApp : D3DApp, IRender
             }
 #endif
             MessageBox.Show(strLine, "MediaPortal", MessageBoxButtons.OK, MessageBoxIcon.Error);
-          const string mediaPlayerVersion = "11";
+            return;
           }
           Application.DoEvents();
 
-          if (FilterChecker.CheckFileVersion(Environment.SystemDirectory + "\\wmp.dll", mediaPlayerVersion + ".0.0000.0000",
+          // CHECK if Windows MediaPlayer 11 is installed
           string WMP_Main_Ver = "11";
           Log.Debug("Main: Verifying Windows Media Player");
 
@@ -576,35 +570,36 @@ public class MediaPortalApp : D3DApp, IRender
           if (FilterChecker.CheckFileVersion(Environment.SystemDirectory + "\\wmp.dll", WMP_Main_Ver + ".0.0000.0000",
                                              out aParamVersion))
           {
-            if (_splashScreen != null)
+            Log.Info("Main: Windows Media Player version {0} installed", aParamVersion);
           }
-              _splashScreen.Stop();
-              _splashScreen = null;
+          else
+          {
 #if !DEBUG
             if (splashScreen != null)
-            var strLine = "Please install Windows Media Player " + mediaPlayerVersion + "\r\n";
-               strLine += "MediaPortal cannot run without Windows Media Player " + mediaPlayerVersion;
+            {
+              splashScreen.Stop();
               splashScreen = null;
+            }
 #endif
             string strLine = "Please install Windows Media Player " + WMP_Main_Ver + "\r\n";
             strLine = strLine + "MediaPortal cannot run without Windows Media Player " + WMP_Main_Ver;
-          // Check TvPlugin version
-          var mpExe = Assembly.GetExecutingAssembly().Location;
-          var tvPlugin = Config.GetFolder(Config.Dir.Plugins) + "\\Windows\\TvPlugin.dll";
+            MessageBox.Show(strLine, "MediaPortal", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            //return;
+          }
 
 #if !DEBUG
-            var tvPluginVersion = FileVersionInfo.GetVersionInfo(tvPlugin).ProductVersion;
-            var mpVersion = FileVersionInfo.GetVersionInfo(mpExe).ProductVersion;
-            if (mpVersion != tvPluginVersion)
+  // Check TvPlugin version
+          string MpExe = Assembly.GetExecutingAssembly().Location;
+          string tvPlugin = Config.GetFolder(Config.Dir.Plugins) + "\\Windows\\TvPlugin.dll";
           if (File.Exists(tvPlugin) && !_avoidVersionChecking)
-              var strLine = "TvPlugin and MediaPortal don't have the same version.\r\n";
-                 strLine += "Please update the older component to the same version as the newer one.\r\n";
-                 strLine += "MediaPortal Version: " + mpVersion + "\r\n";
-                 strLine += "TvPlugin    Version: " + tvPluginVersion;
-              if (_splashScreen != null)
+          {
+            string tvPluginVersion = FileVersionInfo.GetVersionInfo(tvPlugin).ProductVersion;
+            string MpVersion = FileVersionInfo.GetVersionInfo(MpExe).ProductVersion;
+            if (MpVersion != tvPluginVersion)
+            {
               string strLine = "TvPlugin and MediaPortal don't have the same version.\r\n";
-                _splashScreen.Stop();
-                _splashScreen = null;
+              strLine += "Please update the older component to the same version as the newer one.\r\n";
+              strLine += "MediaPortal Version: " + MpVersion + "\r\n";
               strLine += "TvPlugin    Version: " + tvPluginVersion;
               if (splashScreen != null)
               {
@@ -614,26 +609,29 @@ public class MediaPortalApp : D3DApp, IRender
               MessageBox.Show(strLine, "MediaPortal", MessageBoxButtons.OK, MessageBoxIcon.Error);
               Log.Info(strLine);
               return;
+            }
+          }
+#endif
         }
         catch (Exception) {}
         //following crashes on some pc's, dunno why
         //Log.Info("  Stop any known recording processes");
         //Utils.KillExternalTVProcesses();
-        if (_splashScreen != null)
+#if !DEBUG
         try
-          _splashScreen.SetInformation(GUILocalizeStrings.Get(62)); // Initializing DirectX...
+        {
 #endif
         Application.DoEvents();
-        var app = new MediaPortalApp();
+        if (splashScreen != null)
         {
           splashScreen.SetInformation(GUILocalizeStrings.Get(62)); // Initializing DirectX...
         }
 
         MediaPortalApp app = new MediaPortalApp();
         Log.Debug("Main: Initializing DirectX");
-          if (_splashScreen != null)
+        if (app.CreateGraphicsSample())
         {
-            _splashScreen.SetInformation(GUILocalizeStrings.Get(63)); // Initializing input devices...
+          IMessageFilter filter = new ThreadMessageFilter(app);
           Application.AddMessageFilter(filter);
           // Initialize Input Devices
           if (splashScreen != null)
@@ -669,26 +667,27 @@ public class MediaPortalApp : D3DApp, IRender
         catch (Exception ex)
         {
           Log.Error(ex);
-        if (_splashScreen != null)
+          Log.Error("MediaPortal stopped due to an exception {0} {1} {2}", ex.Message, ex.Source, ex.StackTrace);
           _mpCrashed = true;
-          _splashScreen.Stop();
-          _splashScreen = null;
+        }
+#endif
 #if !DEBUG
         if (splashScreen != null)
         {
           splashScreen.Stop();
           splashScreen = null;
         }
-          // only re-show the task bar if MP is the one that has hidden it.
-          HideTaskBar(false);
-        if (_useRestartOptions)
+#endif
+        Settings.SaveCache();
+
+        if (autoHideTaskbar)
         {
-          Log.Info("Main: Exiting Windows - {0}", _restartOptions);
+          // only re-show the startbar if MP is the one that has hidden it.
           Win32API.EnableStartBar(true);
           Win32API.ShowStartBar(true);
         }
         if (useRestartOptions)
-          WindowsController.ExitWindows(_restartOptions, false);
+        {
           Log.Info("Main: Exiting Windows - {0}", restartOptions);
           if (File.Exists(Config.GetFile(Config.Dir.Config, "mediaportal.running")))
           {
@@ -704,22 +703,24 @@ public class MediaPortalApp : D3DApp, IRender
             {
               File.Delete(Config.GetFile(Config.Dir.Config, "mediaportal.running"));
             }
-      var msg = "The file MediaPortalDirs.xml has been changed by a recent update in the MediaPortal application directory.\n\n";
-      msg     += "You have to open the file ";
-      msg     += Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) + @"\Team MediaPortal\MediaPortalDirs.xml";
-      msg     += " with an editor, update it with all changes and SAVE it at least once to start up MediaPortal successfully after this update.\n\n";
-      msg     += "If you are not using windows user profiles for MediaPortal's configuration management, ";
-      msg     += "just delete the whole directory mentioned above and reconfigure MediaPortal.";
-      const string msg2 = "\n\n\nDo you want to open your local file now?";
+          }
+        }
+      }
+    }
+    else
+    {
+      string msg =
+        "The file MediaPortalDirs.xml has been changed by a recent update in the MediaPortal application directory.\n\n";
+      msg += "You have to open the file ";
       msg += Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) + @"\Team MediaPortal\MediaPortalDirs.xml";
       msg +=
-      if (_splashScreen != null)
+        " with an editor, update it with all changes and SAVE it at least once to start up MediaPortal successfully after this update.\n\n";
       msg += "If you are not using windows user profiles for MediaPortal's configuration management, ";
-        _splashScreen.Stop();
-        _splashScreen = null;
+      msg += "just delete the whole directory mentioned above and reconfigure MediaPortal.";
+      string msg2 = "\n\n\nDo you want to open your local file now?";
       Log.Error(msg);
 #if !DEBUG
-      var result = MessageBox.Show(msg + msg2, "MediaPortal - Update Conflict", MessageBoxButtons.YesNo,
+      if (splashScreen != null)
       {
         splashScreen.Stop();
         splashScreen = null;
@@ -742,14 +743,14 @@ public class MediaPortalApp : D3DApp, IRender
           "Error opening file " + Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) +
           @"\Team MediaPortal\MediaPortalDirs.xml using notepad.exe", "Error", MessageBoxButtons.OK,
           MessageBoxIcon.Error);
-  private static UnhandledExceptionLogger _logger;
-
-  /// <remark>This method is only used in release builds.</remark>
+      }
+    }
+    Environment.Exit(0);
   }
 
-    _logger = new UnhandledExceptionLogger();
-    var current = AppDomain.CurrentDomain;
-    current.UnhandledException += _logger.LogCrash;
+#if !DEBUG
+  private static UnhandledExceptionLogger logger;
+
   /// <remark>This method is only used in release builds.
   private static void AddExceptionHandler()
   {
@@ -767,35 +768,29 @@ public class MediaPortalApp : D3DApp, IRender
   {
     GUIGraphicsContext.OnAction(new Action((Action.ActionType)command, 0, 0));
   }
-  {
-    _region = new Rectangle[1];
-    _xpos = 50;
-    _suspendGracePeriodSec = 5;
-    UseLongDateFormat = false;
-    DateFormat = string.Empty;
-    _lastContextMenuAction = DateTime.MaxValue;
-    _timeScreenSaver = 300;
-    _useScreenSaver = true;
-    var clientSizeX = 720;
-    var clientSizeY = 576;
-    var screenNumber = 0;
+
+  #endregion
+
+  #region ctor
 
   public MediaPortalApp()
   {
     int clientSizeX = 720;
-      _useScreenSaver = xmlreader.GetValueAsBool("general", "IdleTimer", true);
-      _timeScreenSaver = xmlreader.GetValueAsInt("general", "IdleTimeValue", 300);
-      _useIdleblankScreen = xmlreader.GetValueAsBool("general", "IdleBlanking", false);
+    int clientSizeY = 576;
+    int screenNumber = 0;
+    // check to load plugins
     using (Settings xmlreader = new MPSettings())
     {
-      _showLastActiveModule = xmlreader.GetValueAsBool("general", "showlastactivemodule", false);
+      _suspendGracePeriodSec = xmlreader.GetValueAsInt("general", "suspendgraceperiod", 5);
+      useScreenSaver = xmlreader.GetValueAsBool("general", "IdleTimer", true);
+      timeScreenSaver = xmlreader.GetValueAsInt("general", "IdleTimeValue", 300);
       useIdleblankScreen = xmlreader.GetValueAsBool("general", "IdleBlanking", false);
       clientSizeX = xmlreader.GetValueAsInt("general", "sizex", clientSizeX);
       clientSizeY = xmlreader.GetValueAsInt("general", "sizey", clientSizeY);
       showLastActiveModule = xmlreader.GetValueAsBool("general", "showlastactivemodule", false);
-      if (ScreenNumberOverride >= 0)
+      lastActiveModule = xmlreader.GetValueAsInt("general", "lastactivemodule", -1);
       lastActiveModuleFullscreen = xmlreader.GetValueAsBool("general", "lastactivemodulefullscreen", false);
-        screenNumber = ScreenNumberOverride;
+      screenNumber = xmlreader.GetValueAsInt("screenselector", "screennumber", screenNumber);
     }
     if (GUIGraphicsContext._useScreenSelector)
     {
@@ -808,7 +803,14 @@ public class MediaPortalApp : D3DApp, IRender
         screenNumber = 0;
       }
       Log.Info("currentScreenNr:" + screenNumber);
-    MinimumSize = GUIGraphicsContext.currentScreen.Bounds.Width > clientSizeX ? new Size(clientSizeX + 8, clientSizeY + 27) : new Size(720, 576);
+      GUIGraphicsContext.currentScreen = Screen.AllScreens[screenNumber];
+    }
+    // check if MediaPortal is already running...
+    Log.Info("Main: Checking for running MediaPortal instance");
+    Log.Info(@"Main: Deleting old log\capture.log");
+    Utils.FileDelete(Config.GetFile(Config.Dir.Log, "capture.log"));
+    if (GUIGraphicsContext.currentScreen.Bounds.Width > clientSizeX)
+    {
       MinimumSize = new Size(clientSizeX + 8, clientSizeY + 27);
     }
     else
@@ -817,12 +819,14 @@ public class MediaPortalApp : D3DApp, IRender
     }
     Text = "MediaPortal";
     GUIGraphicsContext.form = this;
-        AutoHideMouse = xmlreader.GetValueAsBool("general", "autohidemouse", true);
+    GUIGraphicsContext.graphics = null;
     GUIGraphicsContext.RenderGUI = this;
-        GUIGraphicsContext.AllowRememberLastFocusedItem = xmlreader.GetValueAsBool("gui","allowRememberLastFocusedItem", false);
-        GUIGraphicsContext.DBLClickAsRightClick = xmlreader.GetValueAsBool("general", "dblclickasrightclick", false);
-        MinimizeOnStartup = xmlreader.GetValueAsBool("general", "minimizeonstartup", false);
-        MinimizeOnGuiExit = xmlreader.GetValueAsBool("general", "minimizeonexit", false);
+    try
+    {
+      using (Settings xmlreader = new MPSettings())
+      {
+        _autoHideMouse = xmlreader.GetValueAsBool("general", "autohidemouse", true);
+        GUIGraphicsContext.MouseSupport = xmlreader.GetValueAsBool("gui", "mousesupport", false);
         GUIGraphicsContext.AllowRememberLastFocusedItem = xmlreader.GetValueAsBool("gui",
                                                                                    "allowRememberLastFocusedItem", false);
         GUIGraphicsContext.DBLClickAsRightClick =
@@ -833,31 +837,21 @@ public class MediaPortalApp : D3DApp, IRender
     }
     catch (Exception)
     {
-    Activated += MediaPortalAppActivated;
-    Deactivate += MediaPortalAppDeactivate;
+    }
+
     SetStyle(ControlStyles.Opaque, true);
     SetStyle(ControlStyles.UserPaint, true);
     SetStyle(ControlStyles.AllPaintingInWmPaint, true);
- }
-
-  public override sealed Size MinimumSize
-  {
-    get
-    {
-      return base.MinimumSize;
-    }
-    set
-    {
-      base.MinimumSize = value;
-    }
-  }
-
-  private static void MediaPortalAppDeactivate(object sender, EventArgs e)
+    SetStyle(ControlStyles.DoubleBuffer, false);
+    Activated += new EventHandler(MediaPortalApp_Activated);
+    Deactivate += new EventHandler(MediaPortalApp_Deactivate);
+    Log.Info("Main: Checking skin version");
+    CheckSkinVersion();
     DoStartupJobs();
     //    startThread.Priority = ThreadPriority.BelowNormal;
     //    startThread.Start();
   }
-  private static void MediaPortalAppActivated(object sender, EventArgs e)
+
   private static void MediaPortalApp_Deactivate(object sender, EventArgs e)
   {
     GUIGraphicsContext.HasFocus = false;
@@ -874,50 +868,53 @@ public class MediaPortalApp : D3DApp, IRender
 
   private void RenderStats()
   {
-        if (_showStats != _showStatsPrevious)
+    try
     {
       UpdateStats();
 
       if (GUIGraphicsContext.IsEvr && g_Player.HasVideo)
-            VMR9Util.g_vmr9.EnableEVRStatsDrawing(_showStats);
+      {
         if (m_bShowStats != m_bShowStatsPrevious)
         {
           // notify EVR presenter only when the setting changes
           if (VMR9Util.g_vmr9 != null)
           {
             VMR9Util.g_vmr9.EnableEVRStatsDrawing(m_bShowStats);
-        // EVR presenter will draw the stats internally
-        _showStatsPrevious = _showStats;
+          }
+          else
           {
-      }
-      _showStatsPrevious = false;
-
-      if (_showStats)
+            return;
+          }
         }
+        // EVR presenter will draw the stats internaly
+        m_bShowStatsPrevious = m_bShowStats;
+        return;
+      }
+      else
       {
-        var font = GUIFontManager.GetFont(0);
+        m_bShowStatsPrevious = false;
       }
 
       if (m_bShowStats)
-          // '\n' doesn't work with the DirectX9 Ex device, so the string is split into two
-          font.DrawText(80, 40, 0xffffffff, FrameStatsLine1, GUIControl.Alignment.ALIGN_LEFT, -1);
-          font.DrawText(80, 55, 0xffffffff, FrameStatsLine2, GUIControl.Alignment.ALIGN_LEFT, -1);
-          _region[0].X = _xpos;
-          _region[0].Y = 0;
-          _region[0].Width = 4;
-          _region[0].Height = GUIGraphicsContext.Height;
-          GUIGraphicsContext.DX9Device.Clear(ClearFlags.Target, Color.FromArgb(255, 255, 255, 255), 1.0f, 0, _region);
+      {
+        GetStats();
+        GUIFont font = GUIFontManager.GetFont(0);
+        if (font != null)
+        {
+          GUIGraphicsContext.SetScalingResolution(0, 0, false);
+          // '\n' doesnt work with the DirectX9 Ex device, so the string is splitted into two
+          font.DrawText(80, 40, 0xffffffff, frameStatsLine1, GUIControl.Alignment.ALIGN_LEFT, -1);
           font.DrawText(80, 55, 0xffffffff, frameStatsLine2, GUIControl.Alignment.ALIGN_LEFT, -1);
           region[0].X = m_ixpos;
           region[0].Y = 0;
-          _frameCount++;
-          if (_frameCount >= (int)fStep)
+          region[0].Width = 4;
+          region[0].Height = GUIGraphicsContext.Height;
           GUIGraphicsContext.DX9Device.Clear(ClearFlags.Target, Color.FromArgb(255, 255, 255, 255), 1.0f, 0, region);
-            _frameCount = 0;
-            _xpos += 12;
-            if (_xpos > GUIGraphicsContext.Width - 50)
+          float fStep = (GUIGraphicsContext.Width - 100);
+          fStep /= (2f * 16f);
+          fStep /= GUIGraphicsContext.CurrentFPS;
           m_iFrameCount++;
-              _xpos = 50;
+          if (m_iFrameCount >= (int)fStep)
           {
             m_iFrameCount = 0;
             m_ixpos += 12;
@@ -935,197 +932,170 @@ public class MediaPortalApp : D3DApp, IRender
     }
   }
 
-    try
-    {
-      switch (msg.Msg)
+  #endregion
 
-        case WM_POWERBROADCAST:
-          Log.Info("Main: WM_POWERBROADCAST: {0}", msg.WParam.ToInt32());
-          switch (msg.WParam.ToInt32())
-          {
+  #region PreProcessMessage() and WndProc()
+
+  protected override void WndProc(ref Message msg)
+  {
+    try
     {
       if (msg.Msg == WM_POWERBROADCAST)
       {
-            case PBT_APMQUERYSUSPEND:
-              Log.Info("Main: Windows is requesting hibernate mode - UI bit: {0}", msg.LParam.ToInt32());
-              break;
+        Log.Info("Main: WM_POWERBROADCAST: {0}", msg.WParam.ToInt32());
+        switch (msg.WParam.ToInt32())
+        {
             //The PBT_APMQUERYSUSPEND message is sent to request permission to suspend the computer.
             //An application that grants permission should carry out preparations for the suspension before returning.
             //Return TRUE to grant the request to suspend. To deny the request, return BROADCAST_QUERY_DENY.
           case PBT_APMQUERYSUSPEND:
-            case PBT_APMQUERYSTANDBY:
-              // Stop all media before suspending or hibernating
-              Log.Info("Main: Windows is requesting standby mode - UI bit: {0}", msg.LParam.ToInt32());
-              break;
+            Log.Info("Main: Windows is requesting hibernate mode - UI bit: {0}", msg.LParam.ToInt32());
+            break;
+
+            //The PBT_APMQUERYSTANDBY message is sent to request permission to suspend the computer.
             //An application that grants permission should carry out preparations for the suspension before returning.
             //Return TRUE to grant the request to suspend. To deny the request, return BROADCAST_QUERY_DENY.
           case PBT_APMQUERYSTANDBY:
-            case PBT_APMQUERYSUSPENDFAILED:
-              Log.Info("Main: Windows is denied to go to suspended mode");
-              // dero: IT IS NOT SAFE to rely on this message being sent! Sometimes it is not sent even if we
-              // processed PBT_AMQUERYSUSPEND/PBT_APMQUERYSTANDBY
-              // I observed this using TVService.PowerScheduler
-              break;
+            // Stop all media before suspending or hibernating
+            Log.Info("Main: Windows is requesting standby mode - UI bit: {0}", msg.LParam.ToInt32());
+            break;
+
+            //The PBT_APMQUERYSUSPENDFAILED message is sent to notify the application that suspension was denied
+            //by some other application. However, this message is only sent when we receive PBT_APMQUERY* before.
           case PBT_APMQUERYSUSPENDFAILED:
             Log.Info("Main: Windows is denied to go to suspended mode");
             // dero: IT IS NOT SAFE to rely on this message being sent! Sometimes it is not sent even if we
-            case PBT_APMQUERYSTANDBYFAILED:
-              Log.Info("Main: Windows is denied to go to standby mode");
-              // dero: IT IS NOT SAFE to rely on this message being sent! Sometimes it is not sent even if we
-              // processed PBT_AMQUERYSUSPEND/PBT_APMQUERYSTANDBY
-              // I observed this using TVService.PowerScheduler
-              break;
-          case PBT_APMQUERYSTANDBYFAILED:
-            case PBT_APMSTANDBY:
-              Log.Info("Main: Windows is going to standby");
-              OnSuspend();
-              break;
+            // processed PBT_AMQUERYSUSPEND/PBT_APMQUERYSTANDBY
+            // I observed this using TVService.PowerScheduler
             break;
-            case PBT_APMSUSPEND:
-              Log.Info("Main: Windows is suspending");
-              OnSuspend();
-              break;
+
+            //The PBT_APMQUERYSTANDBYFAILED message is sent to notify the application that suspension was denied
+            //by some other application. However, this message is only sent when we receive PBT_APMQUERY* before.
+          case PBT_APMQUERYSTANDBYFAILED:
+            Log.Info("Main: Windows is denied to go to standby mode");
+            // dero: IT IS NOT SAFE to rely on this message being sent! Sometimes it is not sent even if we
+            // processed PBT_AMQUERYSUSPEND/PBT_APMQUERYSTANDBY
+            // I observed this using TVService.PowerScheduler
+            break;
+
+          case PBT_APMSTANDBY:
+            Log.Info("Main: Windows is going to standby");
+            OnSuspend(ref msg);
             break;
 
           case PBT_APMSUSPEND:
             Log.Info("Main: Windows is suspending");
-            case PBT_APMRESUMECRITICAL:
-              Log.Info("Main: Windows has resumed from critical hibernate mode");
-              OnResume();
-              break;
+            OnSuspend(ref msg);
+            break;
+
+            //The PBT_APMRESUMECRITICAL event is broadcast as a notification that the system has resumed operation. 
             //this event can indicate that some or all applications did not receive a PBT_APMSUSPEND event. 
             //For example, this event can be broadcast after a critical suspension caused by a failing battery.
-            case PBT_APMRESUMESUSPEND:
-              Log.Info("Main: Windows has resumed from hibernate mode");
-              OnResume();
-              break;
+          case PBT_APMRESUMECRITICAL:
+            Log.Info("Main: Windows has resumed from critical hibernate mode");
+            OnResume();
+            break;
 
             //The PBT_APMRESUMESUSPEND event is broadcast as a notification that the system has resumed operation after being suspended.
-            case PBT_APMRESUMESTANDBY:
-              Log.Info("Main: Windows has resumed from standby mode");
-              OnResume();
-              break;
+          case PBT_APMRESUMESUSPEND:
+            Log.Info("Main: Windows has resumed from hibernate mode");
+            OnResume();
+            break;
 
             //The PBT_APMRESUMESTANDBY event is broadcast as a notification that the system has resumed operation after being standby.
           case PBT_APMRESUMESTANDBY:
-            case PBT_APMRESUMEAUTOMATIC:
-              Log.Info("Main: Windows has resumed from standby or hibernate mode to handle a requested event");
-              OnResumeAutomatic();
+            Log.Info("Main: Windows has resumed from standby mode");
+            OnResume();
+            break;
 
-              using (Settings xmlreader = new MPSettings())
+            //The PBT_APMRESUMEAUTOMATIC event is broadcast when the computer wakes up automatically to
+            //handle an event. An application will not generally respond unless it is handling the event, because the user is not present.
+          case PBT_APMRESUMEAUTOMATIC:
+            Log.Info("Main: Windows has resumed from standby or hibernate mode to handle a requested event");
+            OnResumeAutomatic();
+
+            bool useS3Hack;
+            using (Settings xmlreader = new MPSettings())
+            {
+              useS3Hack = xmlreader.GetValueAsBool("debug", "useS3Hack", false);
+              if (useS3Hack)
               {
-                var useS3Hack = xmlreader.GetValueAsBool("debug", "useS3Hack", false);
-                if (useS3Hack)
-                {
-                  Log.Info("Main: useS3Hack enabled, calling OnResume() on automatic resume");
-                  OnResume();
-                }
+                Log.Info("Main: useS3Hack enabled, calling OnResume() on automatic resume");
+                OnResume();
               }
+            }
 
-              break;
-          }
-          _lastMessage = msg.Msg;
-          break;
-        case WM_QUERYENDSESSION:
-          Log.Info("Main: Windows is requesting shutdown mode");
-          base.WndProc(ref msg);
-          Log.Info("Main: shutdown mode granted");
-          ShuttingDown = true;
-          msg.Result = (IntPtr)1; // tell windows we are ready to shutdown
-          _lastMessage = msg.Msg;
-          break;
-        // http://mantis.team-mediaportal.com/view.php?id=1073
-        case WM_ENDSESSION:
-          base.WndProc(ref msg);
-          Log.Info("Main: shutdown mode executed");
-          msg.Result = IntPtr.Zero; // tell windows it's OK to shutdown        
-          _mouseClickTimer.Stop();
-          _mouseClickTimer.Dispose();
-          Application.ExitThread();
-          Application.Exit();
-          _lastMessage = msg.Msg;
-          break;
-        case WM_DEVICECHANGE:
-          if (RemovableDriveHelper.HandleDeviceChangedMessage(msg))
-          {
-            return;
-          }
-          _lastMessage = msg.Msg;
-          break;
-        case WM_ACTIVATEAPP:
-          if (Ready && _lastMessage == WM_ACTIVATE)
-          {
-            var activate = (((int) msg.WParam != 0));
-            if (activate)
-            {
-              RestoreFromTray();
-            }
-            else
-            {
-              MinimizeToTray();
-            }
-          }
-          _lastMessage = msg.Msg;
-          break;
-        default:
-          _lastMessage = msg.Msg;
-          break;
-      
-      // don't continue if activating or deactivating app
-      if (_lastMessage == WM_ACTIVATEAPP)
+            break;
+        }
+      }
+      else if (msg.Msg == WM_QUERYENDSESSION)
       {
-          g_Player.WndProc(ref msg);
-          base.WndProc(ref msg);
-          return;
-      
+        Log.Info("Main: Windows is requesting shutdown mode");
+        base.WndProc(ref msg);
+        Log.Info("Main: shutdown mode granted");
+        _shuttingDown = true;
+        msg.Result = (IntPtr)1; //tell windows we are ready to shutdown          
+      }
+        // gibman - http://mantis.team-mediaportal.com/view.php?id=1073     
+      else if (msg.Msg == WM_ENDSESSION) // && msg.WParam == ((IntPtr)1))
+      {
+        base.WndProc(ref msg);
+        Log.Info("Main: shutdown mode executed");
+        msg.Result = IntPtr.Zero; // tell windows it's ok to shutdown        
+        tMouseClickTimer.Stop();
+        tMouseClickTimer.Dispose();
+        Application.ExitThread();
+        Application.Exit();
       }
       else if (msg.Msg == WM_DEVICECHANGE)
       {
         if (RemovableDriveHelper.HandleDeviceChangedMessage(msg))
-      }
-
-      Action action;
-      char key;
-      Keys keyCode;
-      if (InputDevices.WndProc(ref msg, out action, out key, out keyCode))
-        }
-        if (msg.Result.ToInt32() != 1)
-        return;
-          msg.Result = new IntPtr(0);
-        }
-        if (action != null && action.wID != Action.ActionType.ACTION_INVALID)
         {
-          Log.Info("Main: Incoming action: {0}", action.wID);
-          if (ActionTranslator.GetActionDetail(GUIWindowManager.ActiveWindowEx, action))
-      else
-            if (action.SoundFileName.Length > 0 && !g_Player.Playing)
-          if (msg.Result.ToInt32() != 1)
-              Utils.PlaySound(action.SoundFileName, false, true);
-          {
-            {
-          GUIGraphicsContext.OnAction(action);
-          GUIGraphicsContext.ResetLastActivity();
-        }
-        if (keyCode != Keys.A)
-        {
-          Log.Info("Main: Incoming Keycode: {0}", keyCode.ToString());
-          var ke = new KeyEventArgs(keyCode);
-          KeyDownEvent(ke);
-          }
-          if (key != 0)
-        if (key != 0)
-        {
-          Log.Info("Main: Incoming Key: {0}", key);
-          var e = new KeyPressEventArgs(key);
-          KeyPressEvent(e);
           return;
         }
+      }
+      if (PluginManager.WndProc(ref msg))
+      {
+        // msg.Result = new IntPtr(0); <-- do plugins really set it on their own?
         return;
       }
-
+      else
+      {
+        Action action;
+        char key;
+        Keys keyCode;
+        if (InputDevices.WndProc(ref msg, out action, out key, out keyCode))
+        {
+          if (msg.Result.ToInt32() != 1)
+          {
+            msg.Result = new IntPtr(0);
+          }
+          if (action != null && action.wID != Action.ActionType.ACTION_INVALID)
+          {
+            Log.Info("Main: Incoming action: {0}", action.wID);
+            if (ActionTranslator.GetActionDetail(GUIWindowManager.ActiveWindowEx, action))
+            {
+              if (action.SoundFileName.Length > 0 && !g_Player.Playing)
+              {
+                Utils.PlaySound(action.SoundFileName, false, true);
+              }
+            }
+            GUIGraphicsContext.OnAction(action);
+            GUIGraphicsContext.ResetLastActivity();
+          }
+          if (keyCode != Keys.A)
+          {
+            Log.Info("Main: Incoming Keycode: {0}", keyCode.ToString());
+            KeyEventArgs ke = new KeyEventArgs(keyCode);
+            keydown(ke);
+            return;
+          }
+          if (key != 0)
+          {
+            Log.Info("Main: Incoming Key: {0}", key);
             KeyPressEventArgs e = new KeyPressEventArgs(key);
             keypressed(e);
-        // windows wants to activate the screen saver
+            return;
           }
           return;
         }
@@ -1144,14 +1114,14 @@ public class MediaPortalApp : D3DApp, IRender
         }
       }
       //if (msg.Msg==WM_KEYDOWN) Debug.WriteLine("msg keydown");
-  private static readonly object SyncObj = new object();
+      g_Player.WndProc(ref msg);
       base.WndProc(ref msg);
     }
-  // since local DBs have no problems.
+    catch (Exception ex)
     {
       Log.Error(ex);
-    var dbPath = FolderSettings.DatabaseName;
-    var isRemotePath = (string.IsNullOrEmpty(dbPath) || PathIsNetworkPath(dbPath));
+    }
+  }
 
   private static object syncObj = new object();
 
@@ -1182,11 +1152,11 @@ public class MediaPortalApp : D3DApp, IRender
     }
 
     dbPath = MediaPortal.Music.Database.MusicDatabase.Instance.DatabaseName;
-  // since local DBs have no problems.
-  private static void DisposeDBs()
+    isRemotePath = (string.IsNullOrEmpty(dbPath) || PathIsNetworkPath(dbPath));
+    if (isRemotePath)
     {
-    var dbPath = FolderSettings.DatabaseName;
-    var isRemotePath = (!string.IsNullOrEmpty(dbPath) && PathIsNetworkPath(dbPath));
+      Log.Info("Main: reopen MusicDatabase.db3 sqllite database.");
+      MediaPortal.Music.Database.MusicDatabase.ReOpen();
     }
   }
 
@@ -1218,32 +1188,33 @@ public class MediaPortalApp : D3DApp, IRender
       MediaPortal.Video.Database.VideoDatabase.Dispose();
     }
 
-  private static bool Currentmodulefullscreen()
+    dbPath = MediaPortal.Music.Database.MusicDatabase.Instance.DatabaseName;
     isRemotePath = (!string.IsNullOrEmpty(dbPath) && PathIsNetworkPath(dbPath));
-    var currentmodulefullscreen = (GUIWindowManager.ActiveWindow == (int)GUIWindow.Window.WINDOW_TVFULLSCREEN ||
-                                   GUIWindowManager.ActiveWindow == (int)GUIWindow.Window.WINDOW_FULLSCREEN_MUSIC ||
-                                   GUIWindowManager.ActiveWindow == (int)GUIWindow.Window.WINDOW_FULLSCREEN_VIDEO ||
-                                   GUIWindowManager.ActiveWindow ==
-                                   (int)GUIWindow.Window.WINDOW_FULLSCREEN_TELETEXT);
+    if (isRemotePath)
+    {
+      Log.Info("Main: disposing MusicDatabase db3 sqllite database.");
+      MediaPortal.Music.Database.MusicDatabase.Dispose();
+    }
   }
 
   private bool Currentmodulefullscreen()
-  //called when windows hibernates or goes into standby mode
-  private void OnSuspend()
+  {
+    bool currentmodulefullscreen = (GUIWindowManager.ActiveWindow == (int)GUIWindow.Window.WINDOW_TVFULLSCREEN ||
                                     GUIWindowManager.ActiveWindow == (int)GUIWindow.Window.WINDOW_FULLSCREEN_MUSIC ||
-    lock (SyncObj)
+                                    GUIWindowManager.ActiveWindow == (int)GUIWindow.Window.WINDOW_FULLSCREEN_VIDEO ||
                                     GUIWindowManager.ActiveWindow ==
                                     (int)GUIWindow.Window.WINDOW_FULLSCREEN_TELETEXT);
     return currentmodulefullscreen;
   }
 
-      _ignoreContextMenuAction = true;
+  //called when windows hibernates or goes into standbye mode
   private void OnSuspend(ref Message msg)
   {
     lock (syncObj)
     {
       if (_suspended)
       {
+        return;
       }
       ignoreContextMenuAction = true;
       _suspended = true;
@@ -1255,7 +1226,7 @@ public class MediaPortalApp : D3DApp, IRender
         bool wasFullscreen = Currentmodulefullscreen();
         g_Player.Stop();
         //wait for player to stop before proceeding                
-      if (GUIGraphicsContext.DX9Device.PresentationParameters.Windowed == false && !Windowed)
+        while (GUIGraphicsContext.IsPlaying)
         {
           Thread.Sleep(100);
         }
@@ -1267,7 +1238,7 @@ public class MediaPortalApp : D3DApp, IRender
       if (GUIGraphicsContext.DX9Device.PresentationParameters.Windowed == false && !windowed)
       {
         Log.Info("Main: Switching to windowed mode");
-      // since local DBs have no problems.
+        SwitchFullScreenOrWindowed(true);
       }
       //stop playback
       _suspended = true;
@@ -1275,18 +1246,46 @@ public class MediaPortalApp : D3DApp, IRender
       InputDevices.Stop();
       Log.Info("Main: Stopping AutoPlay");
       AutoPlay.StopListening();
-  private static readonly object SyncResume = new object();
-  private static readonly object SyncResumeAutomatic = new object();
+      // we only dispose the DB connection if the DB path is remote.      
+      // since local db's have no problems.
       DisposeDBs();
+      VolumeHandler.Dispose();
+      Log.Info("Main: OnSuspend - Done");
+    }
+  }
+
+  //called when windows wakes up again
+  private static object syncResume = new object();
+  private static object syncResumeAutomatic = new object();
+
+  private bool IsNetworkConnected()
+  {
+    DateTime now = DateTime.Now;
+    TimeSpan ts = now - DateTime.Now;
+    bool connected = false;
+    if (SystemInformation.Network)
+    {
+      NetworkInterface[] adapters = NetworkInterface.GetAllNetworkInterfaces();
+      while (ts.TotalSeconds > -10)
+      {
+        foreach (NetworkInterface n in adapters)
+        {
+          if (n.OperationalStatus == OperationalStatus.Up)
+          {
+            connected = true;
+            break;
+          }
+        }
+        if (connected)
         {
           break;
-    if (_onResumeAutomaticRunning)
+        }
         ts = now - DateTime.Now;
       }
     }
     return connected;
   }
-    lock (SyncResumeAutomatic)
+
   private void OnResumeAutomatic()
   {
     if (_onResumeAutomaticRunning == true)
@@ -1304,7 +1303,7 @@ public class MediaPortalApp : D3DApp, IRender
       }
 
       _onResumeAutomaticRunning = false;
-      var waitOnResume = xmlreader.GetValueAsBool("general", "delay resume", false)
+      _runAutomaticResume = false;
       Log.Info("Main: OnResumeAutomatic - Done");
     }
   }
@@ -1315,14 +1314,14 @@ public class MediaPortalApp : D3DApp, IRender
     {
       int waitOnResume = xmlreader.GetValueAsBool("general", "delay resume", false)
                            ? xmlreader.GetValueAsInt("general", "delay", 0)
-    _ignoreContextMenuAction = true;
-    if (_onResumeRunning)
+                           : 0;
+      if (waitOnResume > 0)
       {
         Log.Info("MP waiting on resume {0} secs", waitOnResume);
         Thread.Sleep(waitOnResume * 1000);
       }
     }
-    lock (SyncResume)
+
     GUIGraphicsContext.ResetLastActivity(); // avoid ScreenSaver after standby
     ignoreContextMenuAction = true;
     if (_onResumeRunning == true)
@@ -1341,7 +1340,7 @@ public class MediaPortalApp : D3DApp, IRender
 
       _onResumeRunning = true;
 
-      var oldState = EXECUTION_STATE.ES_CONTINUOUS;
+      ReOpenDBs();
 
       // Systems without DirectX9 Ex have lost graphics device in suspend/hibernate cycle
       if (!GUIGraphicsContext.IsDirectX9ExUsed())
@@ -1349,7 +1348,8 @@ public class MediaPortalApp : D3DApp, IRender
         Log.Info("Main: OnResume - set GUIGraphicsContext.State.LOST");
         GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.LOST;
       }
-          const EXECUTION_STATE state = EXECUTION_STATE.ES_CONTINUOUS | EXECUTION_STATE.ES_DISPLAY_REQUIRED;
+
+      EXECUTION_STATE oldState = EXECUTION_STATE.ES_CONTINUOUS;
       bool turnMonitorOn;
       using (Settings xmlreader = new MPSettings())
       {        
@@ -1369,7 +1369,7 @@ public class MediaPortalApp : D3DApp, IRender
       }
       if (_startWithBasicHome && File.Exists(GUIGraphicsContext.GetThemedSkinFile(@"\basichome.xml")))
       {
-      RecoverDevice();
+        Log.Info("Main: OnResume - Switch to basic home screen");
         GUIWindowManager.ActivateWindow((int)GUIWindow.Window.WINDOW_SECOND_HOME);
       }
       else
@@ -1378,6 +1378,7 @@ public class MediaPortalApp : D3DApp, IRender
         GUIWindowManager.ActivateWindow((int)GUIWindow.Window.WINDOW_HOME);
       }
       Log.Info("Main: OnResume - calling recover device");
+      base.RecoverDevice();
       if (turnMonitorOn)
       {
         SetThreadExecutionState(oldState);
@@ -1388,8 +1389,11 @@ public class MediaPortalApp : D3DApp, IRender
       Log.Debug("Main: OnResume - show last active module?");
       bool result = base.ShowLastActiveModule();
 
+      if (GUIGraphicsContext.IsDirectX9ExUsed())
+      {
+        Log.Info("Main: OnResume - set GUIGraphicsContext.State.RUNNING");
         GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.RUNNING;
-      _ignoreContextMenuAction = false;
+      }
 
       Log.Debug("Main: OnResume - autoplay start listening");
       AutoPlay.StartListening();
@@ -1397,12 +1401,12 @@ public class MediaPortalApp : D3DApp, IRender
       Log.Info("Main: OnResume - initializing volume handler");
       MediaPortal.Player.VolumeHandler vh = MediaPortal.Player.VolumeHandler.Instance;
 
-  // Trap the OnShown event so we can hide the window if the minimize on startup option is set
+      _onResumeRunning = false;
       ignoreContextMenuAction = false;
       _lastOnresume = DateTime.Now;
-    if (MinimizeOnStartup && FirstTimeWindowDisplayed)
+      Log.Info("Main: OnResume - Done");
     }
-      FirstTimeWindowDisplayed = false;
+  }
 
   #endregion
 
@@ -1414,7 +1418,7 @@ public class MediaPortalApp : D3DApp, IRender
       _firstTimeWindowDisplayed = false;
       DoMinimizeOnStartup();
     }
-  public void MediaPortalProcess()
+    base.OnShown(e);
   }
 
   #region process
@@ -1472,16 +1476,18 @@ public class MediaPortalApp : D3DApp, IRender
   #endregion
 
   #region Onstartup() / OnExit()
-    MouseTimeOutTimer = DateTime.Now;
+
   /// <summary>
   /// OnStartup() gets called just before the application starts
   /// </summary>
-    _mouseClickTimer = new Timer(SystemInformation.DoubleClickTime) {AutoReset = false, Enabled = false};
-    _mouseClickTimer.Elapsed += MouseClickTimerElapsed;
-    _mouseClickTimer.SynchronizingObject = this;
+  protected override void OnStartup()
+  {
+    // set window form styles
+    // these styles enable double buffering, which results in no flickering
+    Log.Info("Main: Starting up");
     _mouseTimeOutTimer = DateTime.Now;
     UpdateSplashScreenMessage(GUILocalizeStrings.Get(64)); // Starting plugins...
-      DateFormat = xmlreader.GetValueAsString("home", "dateformat", "<Day> <Month> <DD>");
+    PluginManager.Load();
     PluginManager.Start();
     tMouseClickTimer = new Timer(SystemInformation.DoubleClickTime);
     tMouseClickTimer.AutoReset = false;
@@ -1501,21 +1507,21 @@ public class MediaPortalApp : D3DApp, IRender
     {
       GUIPropertyManager.SetProperty("#date", GetDate());
       GUIPropertyManager.SetProperty("#time", GetTime());
-      if (_splashScreen != null)
+      GUIPropertyManager.SetProperty("#Day", GetDay()); // 01
       GUIPropertyManager.SetProperty("#SDOW", GetShortDayOfWeek()); // Sun
-        _splashScreen.Stop();
+      GUIPropertyManager.SetProperty("#DOW", GetDayOfWeek()); // Sunday
       GUIPropertyManager.SetProperty("#Month", GetMonth()); // 01
-        while (!_splashScreen.isStopped())
+      GUIPropertyManager.SetProperty("#SMOY", GetShortMonthOfYear()); // Jan
       GUIPropertyManager.SetProperty("#MOY", GetMonthOfYear()); // January
       GUIPropertyManager.SetProperty("#SY", GetShortYear()); // 80
       GUIPropertyManager.SetProperty("#Year", GetYear()); // 1980
-        _splashScreen = null;
+
       if (splashScreen != null)
       {
-      if (_useScreenSaver)
+        splashScreen.Stop();
         Activate();
-        SystemParametersInfo(SPI_GETSCREENSAVEACTIVE, 0, ref _isWinScreenSaverInUse, 0);
-        if (_isWinScreenSaverInUse)
+        while (!splashScreen.isStopped())
+        {
           Thread.Sleep(100);
         }
         splashScreen = null;
@@ -1528,12 +1534,14 @@ public class MediaPortalApp : D3DApp, IRender
         {
           SystemParametersInfo(SPI_SETSCREENSAVEACTIVE, 0, 0, SPIF_SENDWININICHANGE);
         }
-    if (_outdatedSkinName != null || PluginManager.IncompatiblePluginAssemblies.Count > 0 || PluginManager.IncompatiblePlugins.Count > 0)
+      }
 
       GlobalServiceProvider.Add<IVideoThumbBlacklist>(new MediaPortal.Video.Database.VideoThumbBlacklistDBImpl());
       Utils.CheckThumbExtractorVersion();
     }
     catch (Exception ex)
+    {
+      Log.Error("MediaPortalApp: Error setting date and time properties - {0}", ex.Message);
     }
     if (_OutdatedSkinName != null || PluginManager.IncompatiblePluginAssemblies.Count > 0 || PluginManager.IncompatiblePlugins.Count > 0)
     {
@@ -1542,14 +1550,14 @@ public class MediaPortalApp : D3DApp, IRender
     Log.Debug("Main: Autoplay start listening");
     AutoPlay.StartListening();
     Log.Info("Main: Initializing volume handler");
-      var dlg = (GUIDialogIncompatiblePlugins)GUIWindowManager.GetWindow((int)GUIWindow.Window.WINDOW_DIALOG_INCOMPATIBLE_PLUGINS);
+    MediaPortal.Player.VolumeHandler vh = MediaPortal.Player.VolumeHandler.Instance;
   }
 
   private int ShowStartupWarningDialogs(int param1, int param2, object data)
-    if (_outdatedSkinName != null)
+  {
     // If skin is outdated it may not have a skin file for this dialog but user may choose to use it anyway
-      var dlg = (GUIDialogOldSkin)GUIWindowManager.GetWindow((int)GUIWindow.Window.WINDOW_DIALOG_OLD_SKIN);
-      dlg.UserSkin = _outdatedSkinName;
+    // So show incompatible plugins dialog first (possibly using default skin)
+    if (PluginManager.IncompatiblePluginAssemblies.Count > 0 || PluginManager.IncompatiblePlugins.Count > 0)
     {
       GUIDialogIncompatiblePlugins dlg = (GUIDialogIncompatiblePlugins)GUIWindowManager.GetWindow((int)GUIWindow.Window.WINDOW_DIALOG_INCOMPATIBLE_PLUGINS);
       dlg.DoModal(GUIWindowManager.ActiveWindow);
@@ -1594,14 +1602,29 @@ public class MediaPortalApp : D3DApp, IRender
         String.Format("Failed to load your language! Aborting startup...\n\n{0}\nstack:{1}", ex.Message, ex.StackTrace),
         "Critical error", MessageBoxButtons.OK, MessageBoxIcon.Stop);
       Application.Exit();
-    Log.Debug("Main: SaveLastActiveModule - enabled {0}", _showLastActiveModule);
-    var currentmodulefullscreen = Currentmodulefullscreen();
-    var currentmodulefullscreenstate = GUIPropertyManager.GetProperty("#currentmodulefullscreenstate");
-    var currentmoduleid = GUIPropertyManager.GetProperty("#currentmoduleid");
-    if (_showLastActiveModule)
+    }
+  }
+
+  /// <summary>
+  /// saves last active module.
   /// </summary>
   private void SaveLastActiveModule()
   {
+    // persist the currently selected module to XML for later use.
+    Log.Debug("Main: SaveLastActiveModule - enabled {0}", showLastActiveModule);
+    bool currentmodulefullscreen = Currentmodulefullscreen();
+    string currentmodulefullscreenstate = GUIPropertyManager.GetProperty("#currentmodulefullscreenstate");
+    string currentmoduleid = GUIPropertyManager.GetProperty("#currentmoduleid");
+    if (showLastActiveModule)
+    {
+      using (Settings xmlreader = new MPSettings())
+      {
+        // if MP was closed/hibernated by the use of remote control, we have to retrieve the fullscreen state in an alternative manner.
+
+        //if currentmoduleid is TV fullscreen, then set currentmoduleid to tvhome.
+        /*switch GUIWindowManager.ActiveWindow
+        {
+          case (int) WINDOW_FULLSCREEN_VIDEO:
             currentmoduleid = Convert.ToString( (int) GUIWindow.Window.WINDOW_TV);
             break;
 
@@ -1642,13 +1665,13 @@ public class MediaPortalApp : D3DApp, IRender
           case (int)GUIWindow.Window.WINDOW_VIDEOS:
             {
               section = "movies";
-        var rememberLastFolder = xmlreader.GetValueAsBool(section, "rememberlastfolder", false);
-        var lastFolder = xmlreader.GetValueAsString(section, "lastfolder", "");
+              break;
+            }
           default:
-        var vDir = new VirtualDirectory();
-        vDir.LoadSettings(section);
-        int pincode;
-        var lastFolderPinProtected = vDir.IsProtectedShare(lastFolder, out pincode);
+            {
+              section = "";
+              break;
+            }
         }
 
         bool rememberLastFolder = xmlreader.GetValueAsBool(section, "rememberlastfolder", false);
@@ -1673,17 +1696,17 @@ public class MediaPortalApp : D3DApp, IRender
     }
   }
 
-    if (_usbuirtdevice != null)
+  /// <summary>
   /// OnExit() Gets called just b4 application stops
-      _usbuirtdevice.Close();
+  /// </summary>
   protected override void OnExit()
-    if (_serialuirdevice != null)
+  {
     SaveLastActiveModule();
-      _serialuirdevice.Close();
+
     Log.Info("Main: Exiting");
-    if (_redeyedevice != null)
+
     if (usbuirtdevice != null)
-      _redeyedevice.Close();
+    {
       usbuirtdevice.Close();
     }
     if (serialuirdevice != null)
@@ -1696,11 +1719,11 @@ public class MediaPortalApp : D3DApp, IRender
     }
 #if AUTOUPDATE
     StopUpdater();
-    if (_mouseClickTimer != null)
+#endif
     GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.STOPPING;
-      _mouseClickTimer.Stop();
-      _mouseClickTimer.Dispose();
-      _mouseClickTimer = null;
+    // stop any file playback
+    g_Player.Stop();
+    // tell window manager that application is closing
     // this gives the windows the chance to do some cleanup
     InputDevices.Stop();
     AutoPlay.StopListening();
@@ -1710,7 +1733,7 @@ public class MediaPortalApp : D3DApp, IRender
       tMouseClickTimer.Stop();
       tMouseClickTimer.Dispose();
       tMouseClickTimer = null;
-    if (_isWinScreenSaverInUse)
+    }
     GUIWaitCursor.Dispose();
     GUIFontManager.ReleaseUnmanagedResources();
     GUIFontManager.Dispose();
@@ -1744,6 +1767,8 @@ public class MediaPortalApp : D3DApp, IRender
     UpdateSplashScreenMessage(GUILocalizeStrings.Get(67)); // Caching graphics...
     try
     {
+      GUITextureManager.Init();
+    }
     catch (Exception exs)
     {
       MessageBox.Show(String.Format("Failed to load your skin! Aborting startup...\n\n{0}", exs.Message),
@@ -1767,20 +1792,29 @@ public class MediaPortalApp : D3DApp, IRender
     UpdateSplashScreenMessage(GUILocalizeStrings.Get(70)); // Loading window plugins...
     if (!string.IsNullOrEmpty(_safePluginsList))
     {
-      UseLongDateFormat = xmlreader.GetValueAsBool("home", "LongTimeFormat", false);
+      PluginManager.LoadWhiteList(_safePluginsList);
     }
     PluginManager.LoadWindowPlugins();
-      var autosize = xmlreader.GetValueAsBool("gui", "autosize", true);
+    PluginManager.CheckExternalPlayersCompatibility();
+    Log.Info("Main: Loading windowmanager");
+    UpdateSplashScreenMessage(GUILocalizeStrings.Get(71)); // Initializing window manager...
+    Log.Info("Main: Resizing windowmanager");
+    using (Settings xmlreader = new MPSettings())
+    {
+      _useLongDateFormat = xmlreader.GetValueAsBool("home", "LongTimeFormat", false);
+      _startWithBasicHome = xmlreader.GetValueAsBool("gui", "startbasichome", false);
+      _useOnlyOneHome = xmlreader.GetValueAsBool("gui", "useonlyonehome", false);
+      bool autosize = xmlreader.GetValueAsBool("gui", "autosize", true);
       if (autosize && !GUIGraphicsContext.Fullscreen)
       {
-        Size = GUIGraphicsContext.currentScreen.Bounds.Width > GUIGraphicsContext.SkinSize.Width 
-          ? new Size(GUIGraphicsContext.SkinSize.Width + 8, GUIGraphicsContext.SkinSize.Height + 54)
-          : new Size(GUIGraphicsContext.SkinSize.Width, GUIGraphicsContext.SkinSize.Height);
+        if (GUIGraphicsContext.currentScreen.Bounds.Width > GUIGraphicsContext.SkinSize.Width)
+        {
+          // Subtract window decorations, etc
           //int nettoHeightOffset = GUIGraphicsContext.currentScreen.Bounds.Height - GUIGraphicsContext.currentScreen.WorkingArea.Heigh t;
           //int nettoWidthOffset = GUIGraphicsContext.currentScreen.Bounds.Width - GUIGraphicsContext.currentScreen.WorkingArea.Width ;
           //Size = new Size(GUIGraphicsContext.SkinSize.Width + nettoWidthOffset, GUIGraphicsContext.SkinSize.Height + nettoHeightOffset);
+          Size = new Size(GUIGraphicsContext.SkinSize.Width + 8, GUIGraphicsContext.SkinSize.Height + 54);
         }
-      }
         else
         {
           Size = new Size(GUIGraphicsContext.SkinSize.Width, GUIGraphicsContext.SkinSize.Height);
@@ -1806,42 +1840,38 @@ public class MediaPortalApp : D3DApp, IRender
     {
       GUIWindowManager.ActivateWindow((int)GUIWindow.Window.WINDOW_SECOND_HOME);
     }
+    else
+    {
+      GUIWindowManager.ActivateWindow(GUIWindowManager.ActiveWindow);
     }
+    Log.Info("Main: Initialized skin");
     if (GUIGraphicsContext.DX9Device != null)
     {
-      _anisotropy = GUIGraphicsContext.DX9Device.DeviceCaps.MaxAnisotropy;
-      _supportsFiltering = Manager.CheckDeviceFormat(
-        GUIGraphicsContext.DX9Device.DeviceCaps.AdapterOrdinal,
-        GUIGraphicsContext.DX9Device.DeviceCaps.DeviceType,
-        GUIGraphicsContext.DX9Device.DisplayMode.Format,
-        Usage.RenderTarget | Usage.QueryFilter, ResourceType.Textures,
-        Format.A8R8G8B8);
-      _supportsAlphaBlend = Manager.CheckDeviceFormat(GUIGraphicsContext.DX9Device.DeviceCaps.AdapterOrdinal,
-                                                      GUIGraphicsContext.DX9Device.DeviceCaps.DeviceType,
-                                                      GUIGraphicsContext.DX9Device.DisplayMode.Format,
-                                                      Usage.RenderTarget | Usage.QueryPostPixelShaderBlending,
-                                                      ResourceType.Surface,
-                                                      Format.A8R8G8B8);
+      Log.Info("Main: DX9 size: {0}x{1}", GUIGraphicsContext.DX9Device.PresentationParameters.BackBufferWidth,
+               GUIGraphicsContext.DX9Device.PresentationParameters.BackBufferHeight);
+      Log.Info("Main: Video memory left: {0} MB", (uint)GUIGraphicsContext.DX9Device.AvailableTextureMemory / 1048576);
+      // consider the aperture size
     }
-
-    // ReSharper disable ObjectCreationAsStatement
-    new GUILayerRenderer();
-    // ReSharper restore ObjectCreationAsStatement
+    SetupCamera2D();
+    g_nAnisotropy = GUIGraphicsContext.DX9Device.DeviceCaps.MaxAnisotropy;
+    supportsFiltering = Manager.CheckDeviceFormat(
+      GUIGraphicsContext.DX9Device.DeviceCaps.AdapterOrdinal,
+      GUIGraphicsContext.DX9Device.DeviceCaps.DeviceType,
       GUIGraphicsContext.DX9Device.DisplayMode.Format,
       Usage.RenderTarget | Usage.QueryFilter, ResourceType.Textures,
       Format.A8R8G8B8);
     bSupportsAlphaBlend = Manager.CheckDeviceFormat(GUIGraphicsContext.DX9Device.DeviceCaps.AdapterOrdinal,
-  /// Updates the splash screen to display the given string. 
-  /// This method checks whether the splash screen exists.
+                                                    GUIGraphicsContext.DX9Device.DeviceCaps.DeviceType,
+                                                    GUIGraphicsContext.DX9Device.DisplayMode.Format,
                                                     Usage.RenderTarget | Usage.QueryPostPixelShaderBlending,
                                                     ResourceType.Surface,
                                                     Format.A8R8G8B8);
 
     new GUILayerRenderer();
     WorkingSet.Minimize();
-      if (_splashScreen != null)
+  }
 
-        _splashScreen.SetInformation(aSplashLine);
+  /// <summary>
   /// Updates the splashscreen to display the given string. 
   /// This method checks whether the splashscreen exists.
   /// </summary>
@@ -1876,7 +1906,7 @@ public class MediaPortalApp : D3DApp, IRender
   /// avoid redundant state setting during Render() or FrameMove().
   /// </summary>
   protected override void OnDeviceReset(Object sender, EventArgs e)
-        var activeWin = GUIWindowManager.ActiveWindow;
+  {
     // Only perform the device reset if we're not shutting down MediaPortal.
     if (GUIGraphicsContext.CurrentState != GUIGraphicsContext.State.STOPPING)
     {
@@ -1889,7 +1919,7 @@ public class MediaPortalApp : D3DApp, IRender
 
         int activeWin = GUIWindowManager.ActiveWindow;
         if (activeWin == 0 && !GUIWindowManager.HasPreviousWindow())
-        // Device lost must be prioritized over this one!
+        {
           if (_startWithBasicHome && File.Exists(GUIGraphicsContext.GetThemedSkinFile(@"\basichome.xml")))
           {
             activeWin = (int)GUIWindow.Window.WINDOW_SECOND_HOME;
@@ -1935,8 +1965,8 @@ public class MediaPortalApp : D3DApp, IRender
       }
     }
   }
-      ResizeOngoing = false;
-      if (OurClientSize != ClientSize)
+
+  #endregion
 
   /// <summary>
   /// Handle OnResizeEnd
@@ -1946,8 +1976,8 @@ public class MediaPortalApp : D3DApp, IRender
     Log.Info("Main: OnResizeEnd");
     if (GUIGraphicsContext.IsDirectX9ExUsed())
     {
-  private static bool _reentrant;
-  private int _d3ErrInvalidCallCounter;
+      _resizeOngoing = false;
+      if (_clientSize != ClientSize)
       {
         _resetOnResize = true;
       }
@@ -1955,7 +1985,7 @@ public class MediaPortalApp : D3DApp, IRender
     base.OnResizeEnd(e);
   }
 
-    if (_reentrant)
+  #region Render()
 
   private static bool reentrant = false;
   private int d3ErrInvalidCallCounter = 0;
@@ -1977,21 +2007,21 @@ public class MediaPortalApp : D3DApp, IRender
                 GUIGraphicsContext.Vmr9Active, GUIGraphicsContext.Vmr9FPS);
       return;
     }
-      _reentrant = true;
-      // if there's no DX9 device (during resizing for example) then just return
+    if (GUIGraphicsContext.Vmr9Active)
+    {
       Log.Error("Main: MediaPortal.Render() called while VMR9 active");
       return;
-        _reentrant = false;
+    }
     if (GUIGraphicsContext.CurrentState == GUIGraphicsContext.State.LOST)
     {
       return;
     }
     try
-        _reentrant = false;
+    {
       reentrant = true;
       // if there's no DX9 device (during resizing for exmaple) then just return
       if (GUIGraphicsContext.DX9Device == null)
-      Frames++;
+      {
         reentrant = false;
         //Log.Info("dx9 device=null");//remove
         return;
@@ -2002,7 +2032,7 @@ public class MediaPortalApp : D3DApp, IRender
         //Log.Info("dx9 state=lost");//remove
         return;
       }
-      _d3ErrInvalidCallCounter = 0;
+      ++frames;
       // clear the surface
       GUIGraphicsContext.DX9Device.Clear(ClearFlags.Target, Color.Black, 1.0f, 0);
       GUIGraphicsContext.DX9Device.BeginScene();
@@ -2020,41 +2050,39 @@ public class MediaPortalApp : D3DApp, IRender
         GUIGraphicsContext.DX9Device.Present(); //SLOW
       }
       catch (DeviceLostException ex)
-      switch (dex.ErrorCode)
       {
-        case D3DERR_INVALIDCALL:
-          {
-            _d3ErrInvalidCallCounter++;
+        Log.Error("Main: Device lost - {0}", ex.ToString());
+        if (!RefreshRateChanger.RefreshRateChangePending)
         {
-            var currentScreenNr = GUIGraphicsContext.currentScreenNumber;
+          g_Player.Stop();
         }
-            if ((currentScreenNr > -1) && (Manager.Adapters.Count > currentScreenNr))
-            {
-              double currentRefreshRate = Manager.Adapters[currentScreenNr].CurrentDisplayMode.RefreshRate;
+        GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.LOST;
+      }
+    }
     catch (DirectXException dex)
-              if (currentRefreshRate > 0 && _d3ErrInvalidCallCounter > (5 * currentRefreshRate))
-              {
-                _d3ErrInvalidCallCounter = 0; //reset counter
-                Log.Info("Main: D3DERR_INVALIDCALL - {0}", dex.ToString());
-                GUIGraphicsContext.DX9ExRealDeviceLost = true;
-                GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.LOST;
-              }
-            }
-          }
-          break;
-        case GPU_REMOVED:
-        case GPU_HUNG:
-          Log.Info("Main: GPU_HUNG - {0}", dex.ToString());
-          GUIGraphicsContext.DX9ExRealDeviceLost = true;
-          if (!RefreshRateChanger.RefreshRateChangePending)
+    {
       if (dex.ErrorCode == D3DERR_INVALIDCALL)
-            g_Player.Stop();
+      {
+        d3ErrInvalidCallCounter++;
+
+        int currentScreenNr = GUIGraphicsContext.currentScreenNumber;
+
+        if ((currentScreenNr > -1) && (Manager.Adapters.Count > currentScreenNr))
+        {
+          double currentRR = Manager.Adapters[currentScreenNr].CurrentDisplayMode.RefreshRate;
+
+          if (currentRR > 0 && d3ErrInvalidCallCounter > (5 * currentRR))
+          {
+            d3ErrInvalidCallCounter = 0; //reset counter
+            Log.Info("Main: D3DERR_INVALIDCALL - {0}", dex.ToString());
+            GUIGraphicsContext.DX9ExRealDeviceLost = true;
+            GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.LOST;
           }
-          GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.LOST;
-          break;
-        default:
-          Log.Error(dex);
-          break;
+        }
+      }
+      else if (dex.ErrorCode == GPU_HUNG ||
+               dex.ErrorCode == GPU_REMOVED)
+      {
         Log.Info("Main: GPU_HUNG - {0}", dex.ToString());
         GUIGraphicsContext.DX9ExRealDeviceLost = true;
         if (!RefreshRateChanger.RefreshRateChangePending)
@@ -2062,7 +2090,8 @@ public class MediaPortalApp : D3DApp, IRender
           g_Player.Stop();
         }
         GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.LOST;
-      _reentrant = false;
+      }
+      else
       {
         Log.Error(dex);
       }
@@ -2073,9 +2102,9 @@ public class MediaPortalApp : D3DApp, IRender
     }
     finally
     {
-    if (DateTime.Now.Second != _updateTimer.Second)
+      //Log.Info("app:render() done");
       reentrant = false;
-      _updateTimer = DateTime.Now;
+    }
   }
 
   #endregion
@@ -2091,10 +2120,14 @@ public class MediaPortalApp : D3DApp, IRender
       GUIPropertyManager.SetProperty("#date", GetDate());
       GUIPropertyManager.SetProperty("#time", GetTime());
     }
-      _playingState = true;
+#if AUTOUPDATE
     CheckForNewUpdate();
 #endif
     g_Player.Process();
+    // update playing status
+    if (GUIGraphicsContext.CurrentState == GUIGraphicsContext.State.LOST)
+    {
+      RecoverDevice();
     }
 
     if (g_Player.Playing)
@@ -2137,8 +2170,8 @@ public class MediaPortalApp : D3DApp, IRender
         GUIPropertyManager.SetProperty("#currentplaytime",
                                        Utils.SecondsToHMSString((int)g_Player.CurrentPosition));
         GUIPropertyManager.SetProperty("#currentremaining",
-        var fPercentage = (float)(100.0d * g_Player.CurrentPosition / g_Player.Duration);
-        GUIPropertyManager.SetProperty("#percentage", fPercentage.ToString(CultureInfo.InvariantCulture));
+                                       Utils.SecondsToHMSString(
+                                         (int)(g_Player.Duration - g_Player.CurrentPosition)));
         GUIPropertyManager.SetProperty("#shortcurrentremaining",
                                        Utils.SecondsToShortHMSString(
                                          (int)(g_Player.Duration - g_Player.CurrentPosition)));
@@ -2146,15 +2179,15 @@ public class MediaPortalApp : D3DApp, IRender
                                        Utils.SecondsToShortHMSString((int)g_Player.CurrentPosition));
       }
       if (g_Player.Duration > 0)
-      GUIPropertyManager.SetProperty("#playspeed", g_Player.Speed.ToString(CultureInfo.InvariantCulture));
+      {
         GUIPropertyManager.SetProperty("#duration", Utils.SecondsToHMSString((int)g_Player.Duration));
         GUIPropertyManager.SetProperty("#shortduration", Utils.SecondsToShortHMSString((int)g_Player.Duration));
         float fPercentage = (float)(100.0d * g_Player.CurrentPosition / g_Player.Duration);
         GUIPropertyManager.SetProperty("#percentage", fPercentage.ToString());
-      if (_playingState)
+      }
       else
       {
-        _playingState = false;
+        GUIPropertyManager.SetProperty("#duration", string.Empty);
         GUIPropertyManager.SetProperty("#shortduration", string.Empty);
         GUIPropertyManager.SetProperty("#percentage", "0.0");
       }
@@ -2201,7 +2234,7 @@ public class MediaPortalApp : D3DApp, IRender
         GUIGraphicsContext.BlankScreen = false;
       }
 
-      if (_useScreenSaver)
+      try
       {
         GUIWindowManager.DispatchThreadMessages();
         GUIWindowManager.ProcessWindows();
@@ -2210,12 +2243,12 @@ public class MediaPortalApp : D3DApp, IRender
       {
         Log.Error(ex);
         MessageBox.Show("File not found:" + ex.FileName, "MediaPortal", MessageBoxButtons.OK,
-          if (Maximized)
+                        MessageBoxIcon.Error);
         Close();
       }
-            if (ts.TotalSeconds >= _timeScreenSaver)
+      if (useScreenSaver)
       {
-              if (_useIdleblankScreen)
+        if ((GUIGraphicsContext.IsFullScreenVideo && g_Player.Paused == false) ||
             GUIWindowManager.ActiveWindow == (int)GUIWindow.Window.WINDOW_SLIDESHOW)
         {
           GUIGraphicsContext.ResetLastActivity();
@@ -2266,25 +2299,26 @@ public class MediaPortalApp : D3DApp, IRender
   }
 
   #endregion
-      if ((action.wID == Action.ActionType.ACTION_CONTEXT_MENU || _suspended) && (_showLastActiveModule))
+
   #region Handle messages, keypresses, mouse moves etc
-        if (_ignoreContextMenuAction)
+
+  private void OnAction(Action action)
   {
-          _ignoreContextMenuAction = false;
-          _lastContextMenuAction = DateTime.Now;
+    try
+    {
       // hack/fix for lastactivemodulefullscreen
-        }
-        if (_lastContextMenuAction != DateTime.MaxValue)
+      // when recovering from hibernation/standby after closing with remote control somehow a F9 (keycode 120) onkeydown event is thrown from outside
+      // we are currently filtering it away.
       // sometimes more than one F9 keydown event fired.
-          var ts = _lastContextMenuAction - DateTime.Now;
+      // if these events are not filtered away the F9 context menu is shown on the restored/shown module.
       if ((action.wID == Action.ActionType.ACTION_CONTEXT_MENU || _suspended) && (showLastActiveModule))
       {
-            _ignoreContextMenuAction = false;
-            _lastContextMenuAction = DateTime.Now;
+        //Log.Info("ACTION_CONTEXT_MENU, ignored = {0}, suspended = {1}", ignoreContextMenuAction, _suspended);      
+        if (ignoreContextMenuAction)
         {
           ignoreContextMenuAction = false;
-        }
-        _lastContextMenuAction = DateTime.Now;
+          lastContextMenuAction = DateTime.Now;
+          return;
         }
         else if (lastContextMenuAction != DateTime.MaxValue)
         {
@@ -2294,13 +2328,13 @@ public class MediaPortalApp : D3DApp, IRender
             ignoreContextMenuAction = false;
             lastContextMenuAction = DateTime.Now;
             return;
-        // record current tv program
+          }
         }
         lastContextMenuAction = DateTime.Now;
       }
 
       GUIWindow window;
-            var tvHome = GUIWindowManager.GetWindow((int)GUIWindow.Window.WINDOW_TV);
+      if (action.IsUserAction())
       {
         GUIGraphicsContext.ResetLastActivity();
       }
@@ -2311,7 +2345,8 @@ public class MediaPortalApp : D3DApp, IRender
           if ((GUIGraphicsContext.IsTvWindow(GUIWindowManager.ActiveWindowEx) &&
                GUIWindowManager.ActiveWindowEx != (int)GUIWindow.Window.WINDOW_TVGUIDE) &&
               (GUIWindowManager.ActiveWindowEx != (int)GUIWindow.Window.WINDOW_DIALOG_TVGUIDE))
-        // TV: zap to previous channel
+          {
+            GUIWindow tvHome = GUIWindowManager.GetWindow((int)GUIWindow.Window.WINDOW_TV);
             if (tvHome != null)
             {
               if (tvHome.GetID != GUIWindowManager.ActiveWindow)
@@ -2320,7 +2355,8 @@ public class MediaPortalApp : D3DApp, IRender
                 return;
               }
             }
-        // TV: zap to next channel
+          }
+          break;
 
           //TV: zap to previous channel
         case Action.ActionType.ACTION_PREV_CHANNEL:
@@ -2329,7 +2365,8 @@ public class MediaPortalApp : D3DApp, IRender
             window = GUIWindowManager.GetWindow((int)GUIWindow.Window.WINDOW_TV);
             window.OnAction(action);
             return;
-        // TV: zap to last channel viewed
+          }
+          break;
 
           //TV: zap to next channel
         case Action.ActionType.ACTION_NEXT_CHANNEL:
@@ -2338,25 +2375,31 @@ public class MediaPortalApp : D3DApp, IRender
             window = GUIWindowManager.GetWindow((int)GUIWindow.Window.WINDOW_TV);
             window.OnAction(action);
             return;
-        // toggle between directx windowed and exclusive mode
+          }
+          break;
 
           //TV: zap to last channel viewed
-          return;
-        // mute or unmute audio
+        case Action.ActionType.ACTION_LAST_VIEWED_CHANNEL: // mPod
+          if (!GUIWindowManager.IsRouted)
+          {
+            window = GUIWindowManager.GetWindow((int)GUIWindow.Window.WINDOW_TV);
             window.OnAction(action);
             return;
           }
-        // decrease volume 
+          break;
+
           //toggle between directx windowed and exclusive mode
         case Action.ActionType.ACTION_TOGGLE_WINDOWED_FULLSCREEN:
           ToggleFullWindowed();
-        // increase volume 
+          return;
+          //break;
 
           //mute or unmute audio
         case Action.ActionType.ACTION_VOLUME_MUTE:
-        // toggle live tv in background
+          VolumeHandler.Instance.IsMuted = !VolumeHandler.Instance.IsMuted;
+          break;
 
-          // show livetv or video as background instead of the static GUI background
+          //decrease volume 
         case Action.ActionType.ACTION_VOLUME_DOWN:
           VolumeHandler.Instance.Volume = VolumeHandler.Instance.Previous;
           break;
@@ -2370,8 +2413,10 @@ public class MediaPortalApp : D3DApp, IRender
         case Action.ActionType.ACTION_BACKGROUND_TOGGLE:
           //show livetv or video as background instead of the static GUI background
           // toggle livetv/video in background on/pff
-              var msg = new GUIMessage(GUIMessage.MessageType.GUI_MSG_SHOW_WARNING, 0, 0, 0, 0, 0, 0)
-                              {Param1 = 727, Param2 = 728, Param3 = 729};
+          if (GUIGraphicsContext.ShowBackground)
+          {
+            Log.Info("Main: Using live TV as background");
+            // if on, but we're not playing any video or watching tv
             if (GUIGraphicsContext.Vmr9Active)
             {
               GUIGraphicsContext.ShowBackground = false;
@@ -2379,14 +2424,16 @@ public class MediaPortalApp : D3DApp, IRender
             }
             else
             {
+              //show warning message
               GUIMessage msg = new GUIMessage(GUIMessage.MessageType.GUI_MSG_SHOW_WARNING, 0, 0, 0, 0, 0, 0);
               msg.Param1 = 727; //Live tv in background
               msg.Param2 = 728; //No Video/TV playing
-        //switch between several home windows
-        case Action.ActionType.ACTION_SWITCH_HOME:
-          var newHome = _startWithBasicHome
-                          ? GUIWindow.Window.WINDOW_SECOND_HOME
-                          : GUIWindow.Window.WINDOW_HOME;
+              msg.Param3 = 729; //Make sure that something is playing
+              GUIWindowManager.SendMessage(msg);
+              return;
+            }
+          }
+          else
           {
             Log.Info("Main: Using GUI as background");
             GUIGraphicsContext.ShowBackground = true;
@@ -2400,25 +2447,25 @@ public class MediaPortalApp : D3DApp, IRender
           GUIWindow.Window newHome = _startWithBasicHome
                                        ? GUIWindow.Window.WINDOW_SECOND_HOME
                                        : GUIWindow.Window.WINDOW_HOME;
-            switch (GUIWindowManager.ActiveWindow)
+          // do we prefer to use only one home screen?
+          if (_useOnlyOneHome)
+          {
+            // skip if we are already in there
+            if (GUIWindowManager.ActiveWindow == (int)newHome)
             {
-              case (int)GUIWindow.Window.WINDOW_HOME:
-                newHome = GUIWindow.Window.WINDOW_SECOND_HOME;
-                break;
-              case (int)GUIWindow.Window.WINDOW_SECOND_HOME:
-                newHome = GUIWindow.Window.WINDOW_HOME;
-                break;
+              return;
             }
-          var homeMsg = new GUIMessage(GUIMessage.MessageType.GUI_MSG_GOTO_WINDOW, 0, 0, 0, (int)newHome, 0, null);
+          }
             // we like both 
           else
+          {
             // if already in one home switch to the other
             if (GUIWindowManager.ActiveWindow == (int)GUIWindow.Window.WINDOW_HOME)
             {
-            RestoreFromTray();
-            if ((g_Player.IsVideo || g_Player.IsTV || g_Player.IsDVD) && Volume > 0)
+              newHome = GUIWindow.Window.WINDOW_SECOND_HOME;
+            }
             else if (GUIWindowManager.ActiveWindow == (int)GUIWindow.Window.WINDOW_SECOND_HOME)
-              g_Player.Volume = Volume;
+            {
               newHome = GUIWindow.Window.WINDOW_HOME;
             }
           }
@@ -2428,15 +2475,15 @@ public class MediaPortalApp : D3DApp, IRender
 
         case Action.ActionType.ACTION_MPRESTORE:
           {
-        // reboot PC
+            Log.Info("Main: Restore MP by action");
             Restore();
             if ((g_Player.IsVideo || g_Player.IsTV || g_Player.IsDVD) && m_iVolume > 0)
             {
               g_Player.Volume = m_iVolume;
               g_Player.ContinueGraph();
-            // reboot
-            Log.Info("Main: Reboot requested");
-            var okToChangePowermode = action.fAmount1 == 1;
+              if (g_Player.Paused && !GUIGraphicsContext.IsVMR9Exclusive)
+              {
+                g_Player.Pause();
               }
             }
           }
@@ -2448,20 +2495,22 @@ public class MediaPortalApp : D3DApp, IRender
         case Action.ActionType.ACTION_HIBERNATE:
         case Action.ActionType.ACTION_REBOOT:
           {
-                  _restartOptions = RestartOptions.Reboot;
-                  _useRestartOptions = true;
+            //reboot
+            Log.Info("Main: Reboot requested");
             bool okToChangePowermode = (action.fAmount1 == 1);
 
+            if (!okToChangePowermode)
             {
-                  _restartOptions = RestartOptions.PowerOff;
-                  _useRestartOptions = true;
+              okToChangePowermode = PromptUserBeforeChangingPowermode(action);
+            }
 
-                  ShuttingDown = true;
+            if (okToChangePowermode)
             {
+              switch (action.wID)
               {
                 case Action.ActionType.ACTION_REBOOT:
                   restartOptions = RestartOptions.Reboot;
-                    _restartOptions = RestartOptions.Suspend;
+                  useRestartOptions = true;
                   GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.STOPPING;
                   break;
 
@@ -2469,10 +2518,11 @@ public class MediaPortalApp : D3DApp, IRender
                   restartOptions = RestartOptions.PowerOff;
                   useRestartOptions = true;
                   GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.STOPPING;
+                  base._shuttingDown = true;
                   break;
 
                 case Action.ActionType.ACTION_SUSPEND:
-                    _restartOptions = RestartOptions.Hibernate;
+                  if (IsSuspendOrHibernationAllowed())
                   {
                     restartOptions = RestartOptions.Suspend;
                     Utils.SuspendSystem(false);
@@ -2485,16 +2535,16 @@ public class MediaPortalApp : D3DApp, IRender
 
                 case Action.ActionType.ACTION_HIBERNATE:
                   if (IsSuspendOrHibernationAllowed())
-        // eject CD
+                  {
                     restartOptions = RestartOptions.Hibernate;
                     Utils.HibernateSystem(false);
                   }
                   else
-        // shutdown PC
+                  {
                     Log.Info("Main: HIBERNATE ignored since hibernate graceperiod of {0} sec. is violated.", _suspendGracePeriodSec);
                   }
                   break;
-            var dlg = (GUIDialogMenu)GUIWindowManager.GetWindow((int)GUIWindow.Window.WINDOW_DIALOG_MENU);
+              }
             }
           }
           return;
@@ -2506,9 +2556,10 @@ public class MediaPortalApp : D3DApp, IRender
 
           //shutdown pc
         case Action.ActionType.ACTION_SHUTDOWN:
+          {
             Log.Info("Main: Shutdown dialog");
             GUIDialogMenu dlg = (GUIDialogMenu)GUIWindowManager.GetWindow((int)GUIWindow.Window.WINDOW_DIALOG_MENU);
-                var win = GUIWindowManager.GetWindow((int)GUIWindow.Window.WINDOW_HOME);
+            if (dlg != null)
             {
               dlg.Reset();
               dlg.SetHeading(GUILocalizeStrings.Get(498)); //Menu
@@ -2517,50 +2568,58 @@ public class MediaPortalApp : D3DApp, IRender
               dlg.AddLocalizedString(1032); //Suspend
               dlg.AddLocalizedString(1049); //Hibernate
               dlg.AddLocalizedString(1031); //Reboot
+              dlg.AddLocalizedString(1030); //PowerOff
+              dlg.DoModal(GUIWindowManager.ActiveWindow);
+              //RestartOptions option = RestartOptions.Suspend;
+              if (dlg.SelectedId < 0)
+              {
+                GUIWindow win = GUIWindowManager.GetWindow((int)GUIWindow.Window.WINDOW_HOME);
+                if (win != null)
+                {
+                  win.OnAction(new Action(Action.ActionType.ACTION_MOVE_LEFT, 0, 0));
+                }
+                return;
+              }
+              switch (dlg.SelectedId)
+              {
                 case 1057:
                   ExitMePo();
                   return;
+
                 case 1058:
                   GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.STOPPING;
                   Utils.RestartMePo();
                   break;
-                }
-                  _restartOptions = RestartOptions.PowerOff;
-                  _useRestartOptions = true;
-              switch (dlg.SelectedId)
-                  ShuttingDown = true;
-                case 1057:
-                  return;
-                  _restartOptions = RestartOptions.Reboot;
-                  _useRestartOptions = true;
-                  GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.STOPPING;
-                  ShuttingDown = true;
-                  break;
+
                 case 1030:
-                  _restartOptions = RestartOptions.Suspend;
+                  restartOptions = RestartOptions.PowerOff;
                   useRestartOptions = true;
                   GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.STOPPING;
+                  base._shuttingDown = true;
                   break;
-                  _restartOptions = RestartOptions.Hibernate;
+
                 case 1031:
                   restartOptions = RestartOptions.Reboot;
                   useRestartOptions = true;
                   GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.STOPPING;
                   base._shuttingDown = true;
                   break;
-        // exit MediaPortal
-        case Action.ActionType.ACTION_EXIT:
-          ExitMePo();
-          return;
-        // stop radio
+
+                case 1032:
+                  restartOptions = RestartOptions.Suspend;
+                  Utils.SuspendSystem(false);
+                  break;
+
+                case 1049:
                   restartOptions = RestartOptions.Hibernate;
                   Utils.HibernateSystem(false);
-        // Take screen shot
+                  break;
+              }
             }
             break;
           }
 
-              var directory =
+        //exit mediaportal
         case Action.ActionType.ACTION_EXIT:
           ExitMePo();
           return;
@@ -2570,11 +2629,11 @@ public class MediaPortalApp : D3DApp, IRender
           break;
 
           // Take Screenshot
-              var fileName =
+        case Action.ActionType.ACTION_TAKE_SCREENSHOT:
           {
             try
             {
-              var backbuffer = GUIGraphicsContext.DX9Device.GetBackBuffer(0, 0, BackBufferType.Mono);
+              string directory =
                 string.Format("{0}\\MediaPortal Screenshots\\{1:0000}-{2:00}-{3:00}",
                               Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
                               DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day);
@@ -2585,6 +2644,7 @@ public class MediaPortalApp : D3DApp, IRender
               }
 
               string fileName =
+                string.Format("{0}\\{1:00}-{2:00}-{3:00}", directory, DateTime.Now.Hour,
                               DateTime.Now.Minute, DateTime.Now.Second);
               Log.Info("Main: Taking screenshot - Target: {0}.png", fileName);
               Surface backbuffer = GUIGraphicsContext.DX9Device.GetBackBuffer(0, 0, BackBufferType.Mono);
@@ -2599,7 +2659,7 @@ public class MediaPortalApp : D3DApp, IRender
           }
           break;
 
-          // show DVD menu
+        case Action.ActionType.ACTION_SHOW_GUI:
           {
             // can we handle the switch to fullscreen?
             if (!GUIGraphicsContext.IsFullScreenVideo && g_Player.ShowFullScreenWindow())
@@ -2607,8 +2667,9 @@ public class MediaPortalApp : D3DApp, IRender
               return;
             }
           }
-          // DVD: goto previous chapter
-          // play previous item from playlist;
+          break;
+      }
+      if (g_Player.Playing)
       {
         switch (action.wID)
         {
@@ -2620,11 +2681,12 @@ public class MediaPortalApp : D3DApp, IRender
               return;
             }
             break;
-              PlaylistPlayer.PlayPrevious();
+
             //DVD: goto previous chapter
             //play previous item from playlist;
-          // play next item from playlist;
-          // DVD: goto next chapter
+          case Action.ActionType.ACTION_PREV_ITEM:
+          case Action.ActionType.ACTION_PREV_CHAPTER:
+            if (g_Player.IsDVD || g_Player.HasChapters)
             {
               action = new Action(Action.ActionType.ACTION_PREV_CHAPTER, 0, 0);
               g_Player.OnAction(action);
@@ -2636,15 +2698,16 @@ public class MediaPortalApp : D3DApp, IRender
               playlistPlayer.PlayPrevious();
             }
             break;
-              PlaylistPlayer.PlayNext();
+
             //play next item from playlist;
             //DVD: goto next chapter
-          //  stop playback
+          case Action.ActionType.ACTION_NEXT_CHAPTER:
+          case Action.ActionType.ACTION_NEXT_ITEM:
             if (g_Player.IsDVD || g_Player.HasChapters)
             {
-            // When MyPictures Plugin shows the pictures we want to stop the slide show only, not the player
+              action = new Action(Action.ActionType.ACTION_NEXT_CHAPTER, 0, 0);
               g_Player.OnAction(action);
-              (GUIWindow.Window)(Enum.Parse(typeof (GUIWindow.Window), GUIWindowManager.ActiveWindow.ToString(CultureInfo.InvariantCulture))) ==
+              return;
             }
 
             if (!ActionTranslator.HasKeyMapped(GUIWindowManager.ActiveWindowEx, action.m_key))
@@ -2657,15 +2720,17 @@ public class MediaPortalApp : D3DApp, IRender
           case Action.ActionType.ACTION_STOP:
 
             //When MyPictures Plugin shows the pictures we want to stop the slide show only, not the player
-          // Jump to Music Now Playing
+            if (
+              (GUIWindow.Window)(Enum.Parse(typeof (GUIWindow.Window), GUIWindowManager.ActiveWindow.ToString())) ==
               GUIWindow.Window.WINDOW_SLIDESHOW)
             {
               break;
             }
 
             if (!g_Player.IsTV || !GUIGraphicsContext.IsFullScreenVideo)
-          // play music
-          // resume playback
+            {
+              Log.Info("Main: Stopping media");
+              g_Player.Stop();
               return;
             }
             break;
@@ -2689,11 +2754,13 @@ public class MediaPortalApp : D3DApp, IRender
               if (GUIWindowManager.ActiveWindow == (int)GUIWindow.Window.WINDOW_MUSIC_FILES ||
                   GUIWindowManager.ActiveWindow == (int)GUIWindow.Window.WINDOW_MUSIC_GENRE)
               {
-          // pause (or resume playback)
+                return;
+              }
               g_Player.Speed = 1;
               return;
             }
-          // fast forward...
+
+            g_Player.StepNow();
             g_Player.Speed = 1;
 
             if (g_Player.Paused)
@@ -2704,7 +2771,8 @@ public class MediaPortalApp : D3DApp, IRender
 
             //pause (or resume playback)
           case Action.ActionType.ACTION_PAUSE:
-          // fast rewind...
+            g_Player.Pause();
+            break;
 
             //fast forward...
           case Action.ActionType.ACTION_FORWARD:
@@ -2730,27 +2798,48 @@ public class MediaPortalApp : D3DApp, IRender
               break;
             }
         }
-      throw new Exception("exception occurred", ex);
+      }
       GUIWindowManager.OnAction(action);
     }
     catch (FileNotFoundException ex)
     {
+      Log.Error(ex);
+      MessageBox.Show("File not found:" + ex.FileName, "MediaPortal", MessageBoxButtons.OK, MessageBoxIcon.Error);
+      Close();
+    }
+    catch (Exception ex)
+    {
+      Log.Error(ex);
+      Log.Error("  exception: {0} {1} {2}", ex.Message, ex.Source, ex.StackTrace);
+#if !DEBUG
+      throw new Exception("exception occured", ex);
+#endif
+    }
+  }
+
   private void ExitMePo()
   {
     Log.Info("Main: Exit requested");
-    // is the minimize on GUI option set? If so, minimize to tray...
-    if (MinimizeOnGuiExit && !ShuttingDown)
+    // is the minimize on gui option set?  If so, minimize to tray...
+    if (_minimizeOnGuiExit && !_shuttingDown)
     {
       if (WindowState != FormWindowState.Minimized)
       {
-        Log.Info("Main: Minimizing to tray on GUI exit and restoring task bar");
-        MinimizeToTray();
+        Log.Info("Main: Minimizing to tray on GUI exit and restoring taskbar");
+      }
+      WindowState = FormWindowState.Minimized;
+      Hide();
+      if (autoHideTaskbar)
+      {
+        // only re-show the startbar if MP is the one that has hidden it.
+        Win32API.EnableStartBar(true);
+        Win32API.ShowStartBar(true);
       }
       if (g_Player.IsVideo || g_Player.IsTV || g_Player.IsDVD)
       {
         if (g_Player.Volume > 0)
         {
-          Volume = g_Player.Volume;
+          m_iVolume = g_Player.Volume;
           g_Player.Volume = 0;
         }
         if (g_Player.Paused == false && !GUIGraphicsContext.IsVMR9Exclusive)
@@ -2762,21 +2851,10 @@ public class MediaPortalApp : D3DApp, IRender
     }
     GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.STOPPING;
   }
-  
-  private static bool PromptUserBeforeChangingPowermode(Action action)
-          m_iVolume = g_Player.Volume;
-    var msg = new GUIMessage(GUIMessage.MessageType.GUI_MSG_ASKYESNO, 0, 0, 0, 0, 0, 0);
-        }
-        if (g_Player.Paused == false && !GUIGraphicsContext.IsVMR9Exclusive)
-        {
-          g_Player.Pause();
-        }
-      return;
-    }
-    GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.STOPPING;
 
   private bool PromptUserBeforeChangingPowermode(Action action)
   {
+    GUIMessage msg = new GUIMessage(GUIMessage.MessageType.GUI_MSG_ASKYESNO, 0, 0, 0, 0, 0, 0);
     switch (action.wID)
     {
       case Action.ActionType.ACTION_REBOOT:
@@ -2790,19 +2868,20 @@ public class MediaPortalApp : D3DApp, IRender
       case Action.ActionType.ACTION_SUSPEND:
         msg.Param1 = 1601;
         break;
-    var ts = DateTime.Now - _lastOnresume;
+
       case Action.ActionType.ACTION_HIBERNATE:
         msg.Param1 = 1602;
         break;
     }
     msg.Param2 = 0;
-  protected override void KeyPressEvent(KeyPressEventArgs e)
+    msg.Param3 = 0;
     GUIWindowManager.SendMessage(msg);
 
-    var key = new Key(e.KeyChar, 0);
-    var action = new Action();
-    // is a dialog open or maybe the tv schedule search (GUISMSInputControl)?
+    return (msg.Param1 == 1);
+  }
+
   private bool IsSuspendOrHibernationAllowed()
+  {
     TimeSpan ts = DateTime.Now - _lastOnresume;
     return (ts.TotalSeconds > _suspendGracePeriodSec);
   }
@@ -2824,7 +2903,7 @@ public class MediaPortalApp : D3DApp, IRender
           (GUIWindowManager.ActiveWindowEx != (int)GUIWindow.Window.WINDOW_TV_SEARCH))
       {
         if (action.SoundFileName.Length > 0 && !g_Player.Playing)
-      _showStats = !_showStats;
+        {
           Utils.PlaySound(action.SoundFileName, false, true);
         }
         GUIGraphicsContext.OnAction(action);
@@ -2852,15 +2931,15 @@ public class MediaPortalApp : D3DApp, IRender
       {
         GUIGraphicsContext.ResetLastActivity();
       }
-  protected override void KeyDownEvent(KeyEventArgs e)
+      if (action.SoundFileName.Length > 0 && !g_Player.Playing)
       {
         Utils.PlaySound(action.SoundFileName, false, true);
       }
       GUIGraphicsContext.OnAction(action);
     }
     else
-    var key = new Key(0, (int)e.KeyCode);
-    var action = new Action();
+    {
+      GUIGraphicsContext.ResetLastActivity();
     }
     action = new Action(key, Action.ActionType.ACTION_KEY_PRESSED, 0, 0);
     GUIGraphicsContext.OnAction(action);
@@ -2878,71 +2957,81 @@ public class MediaPortalApp : D3DApp, IRender
     if (ActionTranslator.GetAction(GUIWindowManager.ActiveWindowEx, key, ref action))
     {
       if (action.SoundFileName.Length > 0 && !g_Player.Playing)
-    var screen = new Point {X = Cursor.Position.X, Y = Cursor.Position.Y};
-    var client = PointToClient(screen);
-    var cursorX = client.X;
-    var cursorY = client.Y;
-    var fX = ((float)GUIGraphicsContext.Width) / ClientSize.Width;
-    var fY = ((float)GUIGraphicsContext.Height) / ClientSize.Height;
-    var x = (fX * cursorX) - GUIGraphicsContext.OffsetX;
-    var y = (fY * cursorY) - GUIGraphicsContext.OffsetY;
+      {
+        Utils.PlaySound(action.SoundFileName, false, true);
+      }
+      GUIGraphicsContext.OnAction(action);
+    }
+  }
+
+  #endregion
+
+  #region mouse event handlers
+
   protected override void OnMouseWheel(MouseEventArgs e)
   {
-      var action = new Action(Action.ActionType.ACTION_MOVE_UP, x, y) {MouseButton = e.Button};
-    Point ptScreenUL = new Point();
-    ptScreenUL.X = Cursor.Position.X;
-    ptScreenUL.Y = Cursor.Position.Y;
-    ptClientUL = PointToClient(ptScreenUL);
-      var action = new Action(Action.ActionType.ACTION_MOVE_DOWN, x, y) {MouseButton = e.Button};
-    float fX = ((float)GUIGraphicsContext.Width) / ((float)ClientSize.Width);
-    float fY = ((float)GUIGraphicsContext.Height) / ((float)ClientSize.Height);
-    float x = (fX * iCursorX) - GUIGraphicsContext.OffsetX;
-    float y = (fY * iCursorY) - GUIGraphicsContext.OffsetY;
-    if (e.Delta > 0)
-  protected override void MouseMoveEvent(MouseEventArgs e)
-      Action action = new Action(Action.ActionType.ACTION_MOVE_UP, x, y);
-      action.MouseButton = e.Button;
-    base.MouseMoveEvent(e);
-    if (!ShowCursor)
-    }
-    else if (e.Delta < 0)
-    {
-      Action action = new Action(Action.ActionType.ACTION_MOVE_DOWN, x, y);
-    var screen = new Point {X = Cursor.Position.X, Y = Cursor.Position.Y};
-    var client = PointToClient(screen);
-    var cursorX = client.X;
-    var cursorY = client.Y;
-    if (_lastMousePositionX != cursorX || _lastMousePositionY != cursorY)
-  {
-      if ((Math.Abs(_lastMousePositionX - cursorX) > 10) || (Math.Abs(_lastMousePositionY - cursorY) > 10))
-    base.mousemove(e);
-    if (!_showCursor)
-    {
-      // check any still waiting single click events
-      if (GUIGraphicsContext.DBLClickAsRightClick && _mouseClickFired)
     // Calculate Mouse position
-        if ((Math.Abs(_lastMousePositionX - cursorX) > 10) ||
-            (Math.Abs(_lastMousePositionY - cursorY) > 10))
+    Point ptClientUL;
+    Point ptScreenUL = new Point();
     ptScreenUL.X = Cursor.Position.X;
     ptScreenUL.Y = Cursor.Position.Y;
     ptClientUL = PointToClient(ptScreenUL);
     int iCursorX = ptClientUL.X;
     int iCursorY = ptClientUL.Y;
-      _lastMousePositionX = cursorX;
-      _lastMousePositionY = cursorY;
-      var fX = ((float)GUIGraphicsContext.Width) / ClientSize.Width;
-      var fY = ((float)GUIGraphicsContext.Height) / ClientSize.Height;
-      var x = (fX * cursorX) - GUIGraphicsContext.OffsetX;
-      var y = (fY * cursorY) - GUIGraphicsContext.OffsetY;
-      var window = GUIWindowManager.GetWindow(GUIWindowManager.ActiveWindow);
+    float fX = ((float)GUIGraphicsContext.Width) / ((float)ClientSize.Width);
+    float fY = ((float)GUIGraphicsContext.Height) / ((float)ClientSize.Height);
+    float x = (fX * iCursorX) - GUIGraphicsContext.OffsetX;
+    float y = (fY * iCursorY) - GUIGraphicsContext.OffsetY;
+    if (e.Delta > 0)
+    {
+      Action action = new Action(Action.ActionType.ACTION_MOVE_UP, x, y);
+      action.MouseButton = e.Button;
+      GUIGraphicsContext.OnAction(action);
+      GUIGraphicsContext.ResetLastActivity();
+    }
+    else if (e.Delta < 0)
+    {
+      Action action = new Action(Action.ActionType.ACTION_MOVE_DOWN, x, y);
+      action.MouseButton = e.Button;
+      GUIGraphicsContext.OnAction(action);
+      GUIGraphicsContext.ResetLastActivity();
+    }
+    base.OnMouseWheel(e);
+  }
+
+  protected override void mousemove(MouseEventArgs e)
+  {
+    // Disable first mouse action when mouse was hidden
+    base.mousemove(e);
+    if (!_showCursor)
+    {
+      return;
+    }
+    // Calculate Mouse position
+    Point ptClientUL;
+    Point ptScreenUL = new Point();
+    ptScreenUL.X = Cursor.Position.X;
+    ptScreenUL.Y = Cursor.Position.Y;
+    ptClientUL = PointToClient(ptScreenUL);
+    int iCursorX = ptClientUL.X;
+    int iCursorY = ptClientUL.Y;
+    if (m_iLastMousePositionX != iCursorX || m_iLastMousePositionY != iCursorY)
+    {
+      if ((Math.Abs(m_iLastMousePositionX - iCursorX) > 10) || (Math.Abs(m_iLastMousePositionY - iCursorY) > 10))
+      {
+        GUIGraphicsContext.ResetLastActivity();
+      }
+      //check any still waiting single click events
+      if (GUIGraphicsContext.DBLClickAsRightClick && bMouseClickFired)
       {
         if ((Math.Abs(m_iLastMousePositionX - iCursorX) > 10) ||
-        var action = new Action(Action.ActionType.ACTION_MOUSE_MOVE, x, y) {MouseButton = e.Button};
+            (Math.Abs(m_iLastMousePositionY - iCursorY) > 10))
+        {
           CheckSingleClick();
         }
       }
       // Save last position
-  protected override void MouseDoubleClickEvent(MouseEventArgs e)
+      m_iLastMousePositionX = iCursorX;
       m_iLastMousePositionY = iCursorY;
       //this.Text=String.Format("show {0},{1} {2},{3}",e.X,e.Y,m_iLastMousePositionX,m_iLastMousePositionY);
       float fX = ((float)GUIGraphicsContext.Width) / ((float)ClientSize.Width);
@@ -2950,83 +3039,98 @@ public class MediaPortalApp : D3DApp, IRender
       float x = (fX * iCursorX) - GUIGraphicsContext.OffsetX;
       float y = (fY * iCursorY) - GUIGraphicsContext.OffsetY;
       GUIWindow window = GUIWindowManager.GetWindow(GUIWindowManager.ActiveWindow);
-    if (!ShowCursor)
+      if (window != null)
       {
-      base.MouseClickEvent(e);
+        Action action = new Action(Action.ActionType.ACTION_MOUSE_MOVE, x, y);
         action.MouseButton = e.Button;
+        GUIGraphicsContext.OnAction(action);
+      }
     }
-  
-    var screen = new Point {X = Cursor.Position.X, Y = Cursor.Position.Y};
-    var client = PointToClient(screen);
-    var cursorX = client.X;
-    var cursorY = client.Y;
+  }
+
+  protected override void mousedoubleclick(MouseEventArgs e)
+  {
+    if ((GUIGraphicsContext.DBLClickAsRightClick))
+    {
+      return;
     }
-    var fX = ((float)GUIGraphicsContext.Width) / ClientSize.Width;
-    var fY = ((float)GUIGraphicsContext.Height) / ClientSize.Height;
-    var x = (fX * cursorX) - GUIGraphicsContext.OffsetX;
-    var y = (fY * cursorY) - GUIGraphicsContext.OffsetY;
+    GUIGraphicsContext.ResetLastActivity();
+    // Disable first mouse action when mouse was hidden
+    if (!_showCursor)
+    {
       base.mouseclick(e);
-    _lastMousePositionX = cursorX;
-    _lastMousePositionY = cursorY;
+      return;
+    }
     Action actionMove;
-    var actionMove = new Action(Action.ActionType.ACTION_MOUSE_MOVE, x, y);
+    Action action;
     // Calculate Mouse position
-    var action = new Action(Action.ActionType.ACTION_MOUSE_DOUBLECLICK, x, y)
-                   {MouseButton = e.Button, SoundFileName = "click.wav"};
+    Point ptClientUL;
+    Point ptScreenUL = new Point();
+    ptScreenUL.X = Cursor.Position.X;
     ptScreenUL.Y = Cursor.Position.Y;
     ptClientUL = PointToClient(ptScreenUL);
     int iCursorX = ptClientUL.X;
-    GUIGraphicsContext.OnAction(action);
+    int iCursorY = ptClientUL.Y;
+    // first move mouse
     float fX = ((float)GUIGraphicsContext.Width) / ((float)ClientSize.Width);
-  protected override void MouseClickEvent(MouseEventArgs e)
+    float fY = ((float)GUIGraphicsContext.Height) / ((float)ClientSize.Height);
     float x = (fX * iCursorX) - GUIGraphicsContext.OffsetX;
     float y = (fY * iCursorY) - GUIGraphicsContext.OffsetY;
     // Save last position
-    if (!ShowCursor)
+    m_iLastMousePositionX = iCursorX;
     m_iLastMousePositionY = iCursorY;
-      base.MouseClickEvent(e);
+    // Send move moved action
     actionMove = new Action(Action.ActionType.ACTION_MOUSE_MOVE, x, y);
-    }
-    var mouseButtonRightClick = false;
+    GUIGraphicsContext.OnAction(actionMove);
+    action = new Action(Action.ActionType.ACTION_MOUSE_DOUBLECLICK, x, y);
+    action.MouseButton = e.Button;
     action.SoundFileName = "click.wav";
-    var screen = new Point {X = Cursor.Position.X, Y = Cursor.Position.Y};
-    var client = PointToClient(screen);
-    var cursorX = client.X;
-    var cursorY = client.Y;
-
-    var fX = ((float)GUIGraphicsContext.Width) / ClientSize.Width;
-    var fY = ((float)GUIGraphicsContext.Height) / ClientSize.Height;
-    var x = (fX * cursorX) - GUIGraphicsContext.OffsetX;
-    var y = (fY * cursorY) - GUIGraphicsContext.OffsetY;
+    if (action.SoundFileName.Length > 0 && !g_Player.Playing)
     {
-    _lastMousePositionX = cursorX;
-    _lastMousePositionY = cursorY;
+      Utils.PlaySound(action.SoundFileName, false, true);
     }
-    var actionMove = new Action(Action.ActionType.ACTION_MOUSE_MOVE, x, y);
+    GUIGraphicsContext.OnAction(action);
+    return;
+  }
+
+  protected override void mouseclick(MouseEventArgs e)
+  {
+    GUIGraphicsContext.ResetLastActivity();
+    // Disable first mouse action when mouse was hidden
+    if (!_showCursor)
+    {
+      base.mouseclick(e);
+      return;
+    }
+    Action actionMove;
     Action action;
     bool MouseButtonRightClick = false;
     // Calculate Mouse position
     Point ptClientUL;
     Point ptScreenUL = new Point();
-        if (_mouseClickTimer != null)
+    ptScreenUL.X = Cursor.Position.X;
     ptScreenUL.Y = Cursor.Position.Y;
-          _mouseClickFired = false;
+    ptClientUL = PointToClient(ptScreenUL);
     int iCursorX = ptClientUL.X;
     int iCursorY = ptClientUL.Y;
-            _lastMouseClickEvent = e;
-            _mouseClickFired = true;
-            _mouseClickTimer.Start();
+    // first move mouse
+    float fX = ((float)GUIGraphicsContext.Width) / ((float)ClientSize.Width);
+    float fY = ((float)GUIGraphicsContext.Height) / ((float)ClientSize.Height);
     float x = (fX * iCursorX) - GUIGraphicsContext.OffsetX;
-          }
-          // Double click used as right click
-          _lastMouseClickEvent = null;
-          _mouseClickTimer.Stop();
-          mouseButtonRightClick = true;
+    float y = (fY * iCursorY) - GUIGraphicsContext.OffsetY;
+    //;
+    // Save last position
+    m_iLastMousePositionX = iCursorX;
+    m_iLastMousePositionY = iCursorY;
+    // Send move moved action
+    actionMove = new Action(Action.ActionType.ACTION_MOUSE_MOVE, x, y);
+    GUIGraphicsContext.OnAction(actionMove);
     if (e.Button == MouseButtons.Left)
     {
       if (GUIGraphicsContext.DBLClickAsRightClick)
-        action = new Action(Action.ActionType.ACTION_MOUSE_CLICK, x, y)
-                   {MouseButton = e.Button, SoundFileName = "click.wav"};
+      {
+        if (tMouseClickTimer != null)
+        {
           bMouseClickFired = false;
           if (e.Clicks < 2)
           {
@@ -3035,15 +3139,16 @@ public class MediaPortalApp : D3DApp, IRender
             tMouseClickTimer.Start();
             return;
           }
-    if ((e.Button == MouseButtons.Right) || (mouseButtonRightClick))
+          else
           {
-      var window = GUIWindowManager.GetWindow(GUIWindowManager.ActiveWindow);
+            // Double click used as right click
             eLastMouseClickEvent = null;
             tMouseClickTimer.Stop();
             MouseButtonRightClick = true;
           }
-        action = new Action(Action.ActionType.ACTION_CONTEXT_MENU, x, y)
-                   {MouseButton = e.Button, SoundFileName = "click.wav"};
+        }
+      }
+      else
       {
         action = new Action(Action.ActionType.ACTION_MOUSE_CLICK, x, y);
         action.MouseButton = e.Button;
@@ -3051,7 +3156,7 @@ public class MediaPortalApp : D3DApp, IRender
         if (action.SoundFileName.Length > 0 && !g_Player.Playing)
         {
           Utils.PlaySound(action.SoundFileName, false, true);
-        var key = new Key(0, (int)Keys.Escape);
+        }
         GUIGraphicsContext.OnAction(action);
         return;
       }
@@ -3067,7 +3172,7 @@ public class MediaPortalApp : D3DApp, IRender
         action = new Action(Action.ActionType.ACTION_CONTEXT_MENU, x, y);
         action.MouseButton = e.Button;
         action.SoundFileName = "click.wav";
-      var key = new Key('y', 0);
+        if (action.SoundFileName.Length > 0 && !g_Player.Playing)
         {
           Utils.PlaySound(action.SoundFileName, false, true);
         }
@@ -3075,39 +3180,42 @@ public class MediaPortalApp : D3DApp, IRender
       }
       else
       {
-        GUIGraphicsContext.OnAction(action);
+        Key key = new Key(0, (int)Keys.Escape);
+        action = new Action();
         if (ActionTranslator.GetAction(GUIWindowManager.ActiveWindowEx, key, ref action))
         {
           if (action.SoundFileName.Length > 0 && !g_Player.Playing)
-  private void MouseClickTimerElapsed(object sender, ElapsedEventArgs e)
+          {
             Utils.PlaySound(action.SoundFileName, false, true);
           }
           GUIGraphicsContext.OnAction(action);
           return;
         }
-  {
+      }
+    }
     //middle mouse button=Y
     if (e.Button == MouseButtons.Middle)
     {
       Key key = new Key('y', 0);
       action = new Action();
-        // Don't send single click (only the mouse move event is send)
-        _mouseClickFired = false;
+      if (ActionTranslator.GetAction(GUIWindowManager.ActiveWindowEx, key, ref action))
+      {
         if (action.SoundFileName.Length > 0 && !g_Player.Playing)
         {
           Utils.PlaySound(action.SoundFileName, false, true);
-    if (_mouseClickTimer != null)
+        }
         GUIGraphicsContext.OnAction(action);
-      _mouseClickTimer.Stop();
-      if (_mouseClickFired)
+        return;
+      }
     }
-        var fX = ((float)GUIGraphicsContext.Width) / ClientSize.Width;
-        var fY = ((float)GUIGraphicsContext.Height) / ClientSize.Height;
-        var x = (fX * _lastMousePositionX) - GUIGraphicsContext.OffsetX;
-        var y = (fY * _lastMousePositionY) - GUIGraphicsContext.OffsetY;
-        _mouseClickFired = false;
-        var action = new Action(Action.ActionType.ACTION_MOUSE_CLICK, x, y)
-                       {MouseButton = _lastMouseClickEvent.Button, SoundFileName = "click.wav"};
+  }
+
+  private void tMouseClickTimer_Elapsed(object sender, ElapsedEventArgs e)
+  {
+    CheckSingleClick();
+  }
+
+  private void CheckSingleClick()
   {
     Action action;
     // Check for touchscreen users and TVGuide items
@@ -3118,15 +3226,15 @@ public class MediaPortalApp : D3DApp, IRender
       {
         // Dont send single click (only the mouse move event is send)
         bMouseClickFired = false;
-    if (Volume > 0 && (g_Player.IsVideo || g_Player.IsTV))
+        return;
       }
-      g_Player.Volume = Volume;
+    }
     if (tMouseClickTimer != null)
     {
       tMouseClickTimer.Stop();
       if (bMouseClickFired)
       {
-    RestoreFromTray();
+        float fX = ((float)GUIGraphicsContext.Width) / ((float)ClientSize.Width);
         float fY = ((float)GUIGraphicsContext.Height) / ((float)ClientSize.Height);
         float x = (fX * m_iLastMousePositionX) - GUIGraphicsContext.OffsetX;
         float y = (fY * m_iLastMousePositionY) - GUIGraphicsContext.OffsetY;
@@ -3267,6 +3375,7 @@ public class MediaPortalApp : D3DApp, IRender
     if (_updater==null) return;
     //  tell updater to stop
     _updater.StopUpdater();
+    if (null != _updaterThread)
     {
       //  join the updater thread with a suitable timeout
       bool isThreadJoined = _updaterThread.Join(UPDATERTHREAD_JOIN_TIMEOUT);
@@ -3281,45 +3390,51 @@ public class MediaPortalApp : D3DApp, IRender
 #endif
 
   private void OnMessage(GUIMessage message)
+  {
     if (_suspended)
     {
       return;
+    }
     switch (message.Message)
     {
       case GUIMessage.MessageType.GUI_MSG_RESTART_REMOTE_CONTROLS:
-      case GUIMessage.MessageType.GUI_MSG_TUNE_EXTERNAL_CHANNEL:
-        var bIsInteger = Double.TryParse(message.Label, NumberStyles.Integer, NumberFormatInfo.InvariantInfo, out retNum);
+        Log.Info("Main: Restart remote controls");
+        InputDevices.Stop();
+        InputDevices.Init();
+        break;
+
       case GUIMessage.MessageType.GUI_MSG_GOTO_WINDOW:
         GUIWindowManager.ActivateWindow(message.Param1);
         if (GUIWindowManager.ActiveWindow == (int)GUIWindow.Window.WINDOW_TVFULLSCREEN ||
             GUIWindowManager.ActiveWindow == (int)GUIWindow.Window.WINDOW_FULLSCREEN_TELETEXT ||
-            _usbuirtdevice.ChangeTunerChannel(message.Label);
+            GUIWindowManager.ActiveWindow == (int)GUIWindow.Window.WINDOW_FULLSCREEN_VIDEO ||
             GUIWindowManager.ActiveWindow == (int)GUIWindow.Window.WINDOW_FULLSCREEN_MUSIC)
         {
           GUIGraphicsContext.IsFullScreenVideo = true;
         }
         else
-          _winlircdevice.ChangeTunerChannel(message.Label);
+        {
           GUIGraphicsContext.IsFullScreenVideo = false;
         }
         break;
 
       case GUIMessage.MessageType.GUI_MSG_CD_INSERTED:
         AutoPlay.ExamineCD(message.Label);
-            _redeyedevice.ChangeTunerChannel(message.Label);
+        break;
 
       case GUIMessage.MessageType.GUI_MSG_VOLUME_INSERTED:
         AutoPlay.ExamineVolume(message.Label);
         break;
+
       case GUIMessage.MessageType.GUI_MSG_TUNE_EXTERNAL_CHANNEL:
-        if (GUIGraphicsContext.IsDirectX9ExUsed() && UseEnhancedVideoRenderer)
+        bool bIsInteger;
         double retNum;
         bIsInteger =
           Double.TryParse(message.Label, NumberStyles.Integer, NumberFormatInfo.InvariantInfo, out retNum);
-        var fullscreen = (message.Param1 != 0);
+        try
         {
-                  fullscreen && Maximized);
-        if (Maximized == false || GUIGraphicsContext.CurrentState == GUIGraphicsContext.State.STOPPING)
+          if (bIsInteger)
+          {
             usbuirtdevice.ChangeTunerChannel(message.Label);
           }
         }
@@ -3345,28 +3460,30 @@ public class MediaPortalApp : D3DApp, IRender
           return;
         }
         bool fullscreen = (message.Param1 != 0);
+        Log.Debug("Main: Received DX exclusive mode switch message. Fullscreen && maximized == {0}",
                   fullscreen && isMaximized);
         if (isMaximized == false || GUIGraphicsContext.CurrentState == GUIGraphicsContext.State.STOPPING)
         {
           return;
-          if (Volume > 0 && (g_Player.IsVideo || g_Player.IsTV))
+        }
         if (fullscreen)
-            g_Player.Volume = Volume;
+        {
           //switch to fullscreen mode
           Log.Debug("Main: Goto fullscreen: {0}", GUIGraphicsContext.DX9Device.PresentationParameters.Windowed);
           if (GUIGraphicsContext.DX9Device.PresentationParameters.Windowed)
           {
             SwitchFullScreenOrWindowed(false);
-          RestoreFromTray();
+          }
         }
         else
         {
           //switch to windowed mode
           Log.Debug("Main: Goto windowed mode: {0}",
+                    GUIGraphicsContext.DX9Device.PresentationParameters.Windowed);
           if (!GUIGraphicsContext.DX9Device.PresentationParameters.Windowed)
           {
             SwitchFullScreenOrWindowed(true);
-        var dlgOk = (GUIDialogOK)GUIWindowManager.GetWindow((int)GUIWindow.Window.WINDOW_DIALOG_OK);
+          }
         }
         // Must set the FVF after reset
         GUIFontManager.SetDevice();
@@ -3374,8 +3491,11 @@ public class MediaPortalApp : D3DApp, IRender
 
       case GUIMessage.MessageType.GUI_MSG_GETFOCUS:
         Log.Debug("Main: Setting focus");
+        if (WindowState == FormWindowState.Minimized)
         {
-        var dlgNotify = (GUIDialogNotify)GUIWindowManager.GetWindow((int)GUIWindow.Window.WINDOW_DIALOG_NOTIFY);
+          if (m_iVolume > 0 && (g_Player.IsVideo || g_Player.IsTV))
+          {
+            g_Player.Volume = m_iVolume;
             if (g_Player.Paused)
             {
               g_Player.Pause();
@@ -3385,6 +3505,7 @@ public class MediaPortalApp : D3DApp, IRender
         }
         else
         {
+          Activate();
         }
         //Force.SetForegroundWindow(this.Handle, true);
         break;
@@ -3398,16 +3519,16 @@ public class MediaPortalApp : D3DApp, IRender
         dlgOk.SetLine(4, message.Label3);
         dlgOk.DoModal(GUIWindowManager.ActiveWindow);
         break;
-      _restoreTopMost = true;
+
       case GUIMessage.MessageType.GUI_MSG_REFRESHRATE_CHANGED:
 
         GUIDialogNotify dlgNotify =
           (GUIDialogNotify)GUIWindowManager.GetWindow((int)GUIWindow.Window.WINDOW_DIALOG_NOTIFY);
         if (dlgNotify != null)
-    if (_restoreTopMost)
+        {
           dlgNotify.Reset();
           dlgNotify.ClearAll();
-      _restoreTopMost = false;
+          dlgNotify.SetHeading(message.Label);
           dlgNotify.SetText(message.Label2);
           dlgNotify.TimeOut = message.Param1;
           dlgNotify.DoModal(GUIWindowManager.ActiveWindow);
@@ -3430,16 +3551,16 @@ public class MediaPortalApp : D3DApp, IRender
     }
   }
 
-    if (_supportsFiltering)
+  public void OnStopExternal(Process proc, bool waitForExit)
   {
     if (restoreTopMost)
     {
       TopMost = true;
-      GUIGraphicsContext.DX9Device.SamplerState[0].MaxAnisotropy = _anisotropy;
+      restoreTopMost = false;
     }
   }
 
-      GUIGraphicsContext.DX9Device.SamplerState[1].MaxAnisotropy = _anisotropy;
+  #endregion
 
   #region helper funcs
 
@@ -3450,12 +3571,13 @@ public class MediaPortalApp : D3DApp, IRender
     GUIGraphicsContext.DX9Device.RenderState.ZBufferEnable = true;
     GUIGraphicsContext.DX9Device.RenderState.FogEnable = false;
     GUIGraphicsContext.DX9Device.RenderState.FillMode = FillMode.Solid;
-    if (_supportsAlphaBlend)
+    GUIGraphicsContext.DX9Device.RenderState.SourceBlend = Blend.SourceAlpha;
     GUIGraphicsContext.DX9Device.RenderState.DestinationBlend = Blend.InvSourceAlpha;
     GUIGraphicsContext.DX9Device.TextureState[0].ColorOperation = TextureOperation.Modulate;
     GUIGraphicsContext.DX9Device.TextureState[0].ColorArgument1 = TextureArgument.TextureColor;
     GUIGraphicsContext.DX9Device.TextureState[0].ColorArgument2 = TextureArgument.Diffuse;
-    }
+    GUIGraphicsContext.DX9Device.TextureState[0].AlphaOperation = TextureOperation.Modulate;
+    GUIGraphicsContext.DX9Device.TextureState[0].AlphaArgument1 = TextureArgument.TextureColor;
     GUIGraphicsContext.DX9Device.TextureState[0].AlphaArgument2 = TextureArgument.Diffuse;
     if (supportsFiltering)
     {
@@ -3463,12 +3585,12 @@ public class MediaPortalApp : D3DApp, IRender
       GUIGraphicsContext.DX9Device.SamplerState[0].MagFilter = TextureFilter.Linear;
       GUIGraphicsContext.DX9Device.SamplerState[0].MipFilter = TextureFilter.Linear;
       GUIGraphicsContext.DX9Device.SamplerState[0].MaxAnisotropy = g_nAnisotropy;
-    var dateString = DateFormat;
-    if (string.IsNullOrEmpty(dateString))
+      GUIGraphicsContext.DX9Device.SamplerState[1].MinFilter = TextureFilter.Linear;
+      GUIGraphicsContext.DX9Device.SamplerState[1].MagFilter = TextureFilter.Linear;
       GUIGraphicsContext.DX9Device.SamplerState[1].MipFilter = TextureFilter.Linear;
       GUIGraphicsContext.DX9Device.SamplerState[1].MaxAnisotropy = g_nAnisotropy;
     }
-    var cur = DateTime.Now;
+    else
     {
       GUIGraphicsContext.DX9Device.SamplerState[0].MinFilter = TextureFilter.Point;
       GUIGraphicsContext.DX9Device.SamplerState[0].MagFilter = TextureFilter.Point;
@@ -3535,10 +3657,10 @@ public class MediaPortalApp : D3DApp, IRender
       case 3:
         month = GUILocalizeStrings.Get(23);
         break;
-    dateString = Utils.ReplaceTag(dateString, "<DD>", cur.Day.ToString(CultureInfo.InvariantCulture), "unknown");
+      case 4:
         month = GUILocalizeStrings.Get(24);
-    dateString = Utils.ReplaceTag(dateString, "<MM>", cur.Month.ToString(CultureInfo.InvariantCulture), "unknown");
-    dateString = Utils.ReplaceTag(dateString, "<Year>", cur.Year.ToString(CultureInfo.InvariantCulture), "unknown");
+        break;
+      case 5:
         month = GUILocalizeStrings.Get(25);
         break;
       case 6:
@@ -3548,21 +3670,26 @@ public class MediaPortalApp : D3DApp, IRender
         month = GUILocalizeStrings.Get(27);
         break;
       case 8:
-  protected string GetTime()
-  {
-    return DateTime.Now.ToString(UseLongDateFormat 
-      ? Thread.CurrentThread.CurrentCulture.DateTimeFormat.LongTimePattern 
-      : Thread.CurrentThread.CurrentCulture.DateTimeFormat.ShortTimePattern);
-  }
-
+        month = GUILocalizeStrings.Get(28);
+        break;
+      case 9:
+        month = GUILocalizeStrings.Get(29);
+        break;
+      case 10:
+        month = GUILocalizeStrings.Get(30);
+        break;
+      case 11:
+        month = GUILocalizeStrings.Get(31);
+        break;
+      default:
         month = GUILocalizeStrings.Get(32);
-    var cur = DateTime.Now;
+        break;
     }
     dateString = Utils.ReplaceTag(dateString, "<Day>", day, "unknown");
     dateString = Utils.ReplaceTag(dateString, "<DD>", cur.Day.ToString(), "unknown");
     dateString = Utils.ReplaceTag(dateString, "<Month>", month, "unknown");
     dateString = Utils.ReplaceTag(dateString, "<MM>", cur.Month.ToString(), "unknown");
-    var cur = DateTime.Now;
+    dateString = Utils.ReplaceTag(dateString, "<Year>", cur.Year.ToString(), "unknown");
     dateString = Utils.ReplaceTag(dateString, "<YY>", (cur.Year - 2000).ToString("00"), "unknown");
     GUIPropertyManager.SetProperty("#date", dateString);
     return dateString;
@@ -3593,7 +3720,7 @@ public class MediaPortalApp : D3DApp, IRender
   protected string GetShortDayOfWeek()
   {
     DateTime cur = DateTime.Now;
-    var cur = DateTime.Now;
+    string ddd;
     switch (cur.DayOfWeek)
     {
       case DayOfWeek.Monday:
@@ -3624,92 +3751,94 @@ public class MediaPortalApp : D3DApp, IRender
   protected string GetDayOfWeek()
   {
     DateTime cur = DateTime.Now;
-    var cur = DateTime.Now;
+    string dddd;
     switch (cur.DayOfWeek)
     {
       case DayOfWeek.Monday:
         dddd = GUILocalizeStrings.Get(11);
         break;
-    var shortMonthOfYear = GetMonthOfYear();
-    shortMonthOfYear = shortMonthOfYear.Substring(0, 3);
-    return shortMonthOfYear;
+      case DayOfWeek.Tuesday:
+        dddd = GUILocalizeStrings.Get(12);
+        break;
+      case DayOfWeek.Wednesday:
         dddd = GUILocalizeStrings.Get(13);
         break;
       case DayOfWeek.Thursday:
         dddd = GUILocalizeStrings.Get(14);
-    var cur = DateTime.Now;
-    string monthOfYear;
+        break;
+      case DayOfWeek.Friday:
         dddd = GUILocalizeStrings.Get(15);
         break;
       case DayOfWeek.Saturday:
-        monthOfYear = GUILocalizeStrings.Get(21);
+        dddd = GUILocalizeStrings.Get(16);
         break;
       default:
-        monthOfYear = GUILocalizeStrings.Get(22);
+        dddd = GUILocalizeStrings.Get(17);
         break;
     }
-        monthOfYear = GUILocalizeStrings.Get(23);
+    return dddd;
   }
 
-        monthOfYear = GUILocalizeStrings.Get(24);
+  protected string GetMonth()
   {
     DateTime cur = DateTime.Now;
-        monthOfYear = GUILocalizeStrings.Get(25);
+    return cur.ToString("MM");
   }
 
-        monthOfYear = GUILocalizeStrings.Get(26);
+  protected string GetShortMonthOfYear()
   {
     DateTime cur = DateTime.Now;
-        monthOfYear = GUILocalizeStrings.Get(27);
+    string SMOY = GetMonthOfYear();
     SMOY = SMOY.Substring(0, 3);
     return SMOY;
-        monthOfYear = GUILocalizeStrings.Get(28);
+  }
 
   protected string GetMonthOfYear()
-        monthOfYear = GUILocalizeStrings.Get(29);
+  {
     DateTime cur = DateTime.Now;
     string MMMM;
-        monthOfYear = GUILocalizeStrings.Get(30);
+    switch (cur.Month)
     {
       case 1:
-        monthOfYear = GUILocalizeStrings.Get(31);
+        MMMM = GUILocalizeStrings.Get(21);
         break;
       case 2:
-        monthOfYear = GUILocalizeStrings.Get(32);
+        MMMM = GUILocalizeStrings.Get(22);
         break;
       case 3:
-    return monthOfYear;
+        MMMM = GUILocalizeStrings.Get(23);
         break;
       case 4:
         MMMM = GUILocalizeStrings.Get(24);
         break;
-    var cur = DateTime.Now;
+      case 5:
         MMMM = GUILocalizeStrings.Get(25);
         break;
       case 6:
         MMMM = GUILocalizeStrings.Get(26);
         break;
-    var cur = DateTime.Now;
+      case 7:
         MMMM = GUILocalizeStrings.Get(27);
         break;
       case 8:
         MMMM = GUILocalizeStrings.Get(28);
         break;
-    using (Settings xmlreader = new MPSettings())
-    {
-      var ignoreErrors = xmlreader.GetValueAsBool("general", "dontshowskinversion", false);
+      case 9:
+        MMMM = GUILocalizeStrings.Get(29);
+        break;
+      case 10:
         MMMM = GUILocalizeStrings.Get(30);
         break;
-      }
-    }
-
-    var filename = GUIGraphicsContext.GetThemedSkinFile(@"\references.xml");
+      case 11:
+        MMMM = GUILocalizeStrings.Get(31);
+        break;
+      default:
         MMMM = GUILocalizeStrings.Get(32);
         break;
-      var doc = new XmlDocument();
+    }
     return MMMM;
-      var node = doc.SelectSingleNode("/controls/skin/version");
-      if (node != null)
+  }
+
   protected string GetShortYear()
   {
     DateTime cur = DateTime.Now;
@@ -3720,66 +3849,66 @@ public class MediaPortalApp : D3DApp, IRender
   {
     DateTime cur = DateTime.Now;
     return cur.ToString("yyyy");
-    _outdatedSkinName = Skin;
+  }
 
   protected void CheckSkinVersion()
-    var screenRatio = (screenWidth / screenHeight);
-    Skin = screenRatio > 1.5 ? "DefaultWide" : "Default";
-    Config.SkinName = Skin;
-    GUIGraphicsContext.Skin = Skin;
+  {
+    using (Settings xmlreader = new MPSettings())
+    {
+      bool ignoreErrors = false;
       ignoreErrors = xmlreader.GetValueAsBool("general", "dontshowskinversion", false);
       if (ignoreErrors)
       {
-    var msg = new GUIMessage(GUIMessage.MessageType.GUI_MSG_SKIN_CHANGED, 0, 0, 0, 0, 0, null);
+        return;
       }
     }
-    Log.Info("Main: User skin is not compatable, using skin {0} with theme {1}", Skin, GUIThemeManager.CurrentTheme);
+
     Version versionSkin = null;
     string filename = GUIGraphicsContext.GetThemedSkinFile(@"\references.xml");
     if (File.Exists(filename))
     {
       XmlDocument doc = new XmlDocument();
-  public static void SetDWORDRegKey(RegistryKey hklm, string key, string name, Int32 value)
+      doc.Load(filename);
       XmlNode node = doc.SelectSingleNode("/controls/skin/version");
       if (node != null && node.InnerText != null)
       {
-      using (var subkey = hklm.CreateSubKey(key))
+        versionSkin = new Version(node.InnerText);
       }
     }
     if (CompatibilityManager.SkinVersion == versionSkin)
-          subkey.SetValue(name, value);
+    {
       return;
     }
 
     // Skin is incompatible, switch to default
     _OutdatedSkinName = m_strSkin;
-      Log.Error(@"User does not have sufficient rights to modify registry key HKLM\{0}", key);
+    float screenHeight = GUIGraphicsContext.currentScreen.Bounds.Height;
     float screenWidth = GUIGraphicsContext.currentScreen.Bounds.Width;
     float screenRatio = (screenWidth / screenHeight);
     m_strSkin = screenRatio > 1.5 ? "DefaultWide" : "Default";
-      Log.Error(@"User does not have sufficient rights to modify registry key HKLM\{0}", key);
+    Config.SkinName = m_strSkin;
     GUIGraphicsContext.Skin = m_strSkin;
     SkinSettings.Load();
 
-  public static void SetREGSZRegKey(RegistryKey hklm, string key, string name, string value)
+    // Send a message that the skin has changed.
     GUIMessage msg = new GUIMessage(GUIMessage.MessageType.GUI_MSG_SKIN_CHANGED, 0, 0, 0, 0, 0, null);
     GUIGraphicsContext.SendMessage(msg);
 
-      using (var subkey = hklm.CreateSubKey(key))
+    Log.Info("Main: User skin is not compatable, using skin {0} with theme {1}", m_strSkin, GUIThemeManager.CurrentTheme);
   }
 
 
-          subkey.SetValue(name, value);
+  #region registry helper function
 
   public static void SetDWORDRegKey(RegistryKey hklm, string Key, string Value, Int32 iValue)
   {
     try
     {
-      Log.Error(@"User does not have sufficient rights to modify registry key HKLM\{0}", key);
+      using (RegistryKey subkey = hklm.CreateSubKey(Key))
       {
         if (subkey != null)
         {
-      Log.Error(@"User does not have sufficient rights to modify registry key HKLM\{0}", key);
+          subkey.SetValue(Value, iValue);
         }
       }
     }
@@ -3798,12 +3927,12 @@ public class MediaPortalApp : D3DApp, IRender
     try
     {
       using (RegistryKey subkey = hklm.CreateSubKey(Key))
-      var errorMsg =
+      {
         if (subkey != null)
-                      aParamVersion);
-      Log.Info("Util: quartz.dll error - {0}", errorMsg);
+        {
+          subkey.SetValue(Name, Value);
         }
-        MessageBox.Show(errorMsg, "Core directshow component (quartz.dll) is outdated!", MessageBoxButtons.OKCancel,
+      }
     }
     catch (SecurityException)
     {
@@ -3811,35 +3940,35 @@ public class MediaPortalApp : D3DApp, IRender
     }
     catch (UnauthorizedAccessException)
     {
-    GUIWindowManager.OnNewAction += OnAction;
-    GUIWindowManager.Receivers += OnMessage;
-    GUIWindowManager.Callbacks += MediaPortalProcess;
+      Log.Error(@"User does not have sufficient rights to modify registry key HKLM\{0}", Key);
+    }
+  }
 
-    Utils.OnStartExternal += OnStartExternal;
-    Utils.OnStopExternal += OnStopExternal;
+  #endregion
+
   #endregion
 
   private void DoStartupJobs()
   {
     FilterChecker.CheckInstalledVersions();
-    PlaylistPlayer.Init();
+
     Version aParamVersion;
     //
     // 6.5.2600.3243 = KB941568,   6.5.2600.3024 = KB927544
-      var inputEnabled = xmlreader.GetValueAsBool("USBUIRT", "internal", false);
-      var outputEnabled = xmlreader.GetValueAsBool("USBUIRT", "external", false);
+    //
+    if (
       !FilterChecker.CheckFileVersion(Environment.SystemDirectory + "\\quartz.dll", "6.5.2600.3024", out aParamVersion))
     {
       string ErrorMsg =
-        _usbuirtdevice = USBUIRT.Create(OnRemoteCommand);
+        string.Format("Your version {0} of quartz.dll has too many bugs! \nPlease check our Wiki's requirements page.",
                       aParamVersion.ToString());
       Log.Info("Util: quartz.dll error - {0}", ErrorMsg);
       if (
-      var winlircInputEnabled = xmlreader.GetValueAsString("WINLIRC", "enabled", "false") == "true";
+        MessageBox.Show(ErrorMsg, "Core directshow component (quartz.dll) is outdated!", MessageBoxButtons.OKCancel,
                         MessageBoxIcon.Exclamation) == DialogResult.OK)
       {
         Process.Start(@"http://wiki.team-mediaportal.com/GeneralRequirements");
-        _winlircdevice = new WinLirc();
+      }
     }
 
     EnableS3Trick();
@@ -3847,14 +3976,14 @@ public class MediaPortalApp : D3DApp, IRender
     GUIWindowManager.Receivers += new SendMessageHandler(OnMessage);
     GUIWindowManager.Callbacks += new GUIWindowManager.OnCallBackHandler(MPProcess);
     GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.STARTING;
-        _redeyedevice = RedEye.Create(OnRemoteCommand);
+    Utils.OnStartExternal += new Utils.UtilEventHandler(OnStartExternal);
     Utils.OnStopExternal += new Utils.UtilEventHandler(OnStopExternal);
     // load keymapping from keymap.xml
     ActionTranslator.Load();
     //register the playlistplayer for thread messages (like playback stopped,ended)
     Log.Info("Main: Init playlist player");
     g_Player.Factory = new PlayerFactory();
-        _serialuirdevice = SerialUIR.Create(OnRemoteCommand);
+    playlistPlayer.Init();
     // Only load the USBUIRT device if it has been enabled in the configuration
     using (Settings xmlreader = new MPSettings())
     {
@@ -3868,11 +3997,11 @@ public class MediaPortalApp : D3DApp, IRender
       }
       //Load Winlirc if enabled.
       bool winlircInputEnabled = xmlreader.GetValueAsString("WINLIRC", "enabled", "false") == "true";
-    var doc = new XmlDocument();
+      if (winlircInputEnabled)
       {
         Log.Info("Main: Creating the WINLIRC device");
         winlircdevice = new WinLirc();
-      var node = doc.SelectSingleNode("/configuration/appStart/ClientApplicationInfo/appFolderName");
+        Log.Info("Main: Creating the WINLIRC device done");
       }
       //Load RedEye if enabled.
       bool redeyeInputEnabled = xmlreader.GetValueAsString("RedEye", "internal", "false") == "true";
@@ -3928,6 +4057,10 @@ public class MediaPortalApp : D3DApp, IRender
 #if DEBUG
 #else
 #if AUTOUPDATE
+      UpdaterConfiguration config = UpdaterConfiguration.Instance;
+      config.Logging.LogPath = Config.Get(Config.Dir.Log) + "updatelog.log";
+      config.Applications[0].Client.BaseDir = Config.Get(Config.Dir.Base)
+      config.Applications[0].Client.TempDir =  Config.Get(Config.Dir.Base) + "temp";
       config.Applications[0].Client.XmlFile =  Config.Get(Config.Dir.Base) + "MediaPortal.exe.config";
       config.Applications[0].Server.ServerManifestFileDestination =  Config.Get(Config.Dir.Base) + @"xml\ServerManifest.xml";
       try
@@ -3940,7 +4073,7 @@ public class MediaPortalApp : D3DApp, IRender
 			Utils.DeleteFiles(config.Applications[0].Client.BaseDir + "log", "*.log");
 			ClientApplicationInfo clientInfo = ClientApplicationInfo.Deserialize("MediaPortal.exe.config");
 			clientInfo.AppFolderName = System.IO.Directory.GetCurrentDirectory();
-  /// the value.  The reason for this configuration option is a defect in the S3 implementation
+			ClientApplicationInfo.Save("MediaPortal.exe.config",clientInfo.AppFolderName, clientInfo.InstalledVersion);
 			m_strCurrentVersion = clientInfo.InstalledVersion;
 			Text += (" - [v" + m_strCurrentVersion + "]");
 			//  make an Updater for use in-process with us
@@ -3952,34 +4085,35 @@ public class MediaPortalApp : D3DApp, IRender
 			//  start the updater on a separate thread so that our UI remains responsive
 			_updaterThread = new Thread(new ThreadStart(_updater.StartUpdater));
 			_updaterThread.Start();
-      using (var services = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services", true))
-      {
-        if (services != null)
-        {
-          var usb = services.OpenSubKey("usb", true) ?? services.CreateSubKey("usb");
-          //  Delete the USBBIOSHACKS value if it is still there.  See the remarks.
-          if (usb != null && usb.GetValue("USBBIOSHacks") != null)
+#endif
+#endif
+    }
+    catch (Exception) {}
+    using (Settings xmlreader = new MPSettings())
+    {
+      m_iDateLayout = xmlreader.GetValueAsInt("home", "datelayout", 0);
+    }
+    GUIGraphicsContext.ResetLastActivity();
+  }
+
+  /// <summary>
+  /// Enables the S3 system power state for standby when USB devices are armed for wake, 
+  /// if this option is enabled in the configuration.
+  /// </summary>
+  /// <remarks>
+  /// <para>The trick is to create the following registry value: 
+  /// HKLM\SYSTEM\CurrentControlSet\Services\usb\USBBIOSx and set it to 0.</para>
   /// <para>This method checks whether the <b>enables3trick</b> option in the <b>general</b>
-            usb.DeleteValue("USBBIOSHacks");
+  /// section of the mediaportal.xml file is enabled (which is the default), before setting
   /// the value.  The reason for this configuration option is a bug in the S3 implementation
-          //Check the general.enables3trick configuration option and create/delete the USBBIOSx
-          //value accordingly
-          using (Settings xmlreader = new MPSettings())
+  /// of various (Asus) motherboards like the A7NX8 and A7VX8 that causes the computer to
   /// reboot immediately after hibernating.</para>
-            if (usb != null)
+  /// <para>The previous implementation of this method also created an USBBIOSHACKS value,
   /// which according to this article http://support.microsoft.com/kb/841858/en-us should
-              var enableS3Trick = xmlreader.GetValueAsBool("general", "enables3trick", true);
-              if (enableS3Trick)
-              {
-                usb.SetValue("USBBIOSx", 0);
-              }
-              else if (usb.GetValue("USBBIOSx") != null)
-              {
-                usb.DeleteValue("USBBIOSx");
-              }
-            }
-          }
-        }
+  /// not be used.  That is why the current implementation deletes this key if it still
+  /// exists.</para>
+  /// </remarks>
+  private static void EnableS3Trick()
   {
     try
     {
