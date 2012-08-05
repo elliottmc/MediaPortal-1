@@ -466,7 +466,7 @@ namespace MediaPortal.Player
     //called when current playing file is stopped
     private static void OnChanged(string newFile)
     {
-      if (newFile == null || newFile.Length == 0)
+      if (string.IsNullOrEmpty(newFile))
       {
         return;
       }
