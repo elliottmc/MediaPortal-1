@@ -2005,12 +2005,12 @@ namespace MediaPortal
       // notifyIcon
       // 
       _contextMenu.MenuItems.Clear();
-      _contextMenu.MenuItems.Add(Resources.D3DApp_NotifyIcon_Restore, Restore_OnClick);
+      _contextMenu.MenuItems.Add(Resources.D3DApp_NotifyIcon_Restore, RestoreOnClick);
       _contextMenu.MenuItems.Add(Resources.D3DApp_NotifyIcon_Exit, ExitOnClick);
       _notifyIcon.Text = Resources.D3DApp_NotifyIcon_MediaPortal;
       _notifyIcon.Icon = ((Icon)(resources.GetObject("_notifyIcon.TrayIcon")));
       _notifyIcon.ContextMenu = _contextMenu;
-      _notifyIcon.DoubleClick += Restore_OnClick;
+      _notifyIcon.DoubleClick += RestoreOnClick;
       // 
       // menuItemContext
       // 
@@ -2484,7 +2484,7 @@ namespace MediaPortal
     /// </summary>
     /// <param name="sender"></param>
     /// <param name="e"></param>
-    protected virtual void Restore_OnClick(Object sender, EventArgs e)
+    protected virtual void RestoreOnClick(Object sender, EventArgs e)
     {
       RestoreFromTray();
     }
