@@ -1,11 +1,30 @@
-#region
+#region Copyright (C) 2005-2012 Team MediaPortal
+
+// Copyright (C) 2005-2012 Team MediaPortal
+// http://www.team-mediaportal.com
+// 
+// MediaPortal is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 2 of the License, or
+// (at your option) any later version.
+// 
+// MediaPortal is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+// 
+// You should have received a copy of the GNU General Public License
+// along with MediaPortal. If not, see <http://www.gnu.org/licenses/>.
+
+#endregion
+
+#region usings
 
 using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
-using System.Net.NetworkInformation;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security;
@@ -288,21 +307,21 @@ public class MediaPortalApp : D3DApp, IRender
 #endif
       using (Settings xmlreader = new MPSettings())
       {
-        var MPThreadPriority = xmlreader.GetValueAsString("general", "ThreadPriority", "Normal");
-        if (MPThreadPriority == "AboveNormal")
+        var threadPriority = xmlreader.GetValueAsString("general", "ThreadPriority", "Normal");
+        switch (threadPriority)
         {
-          Thread.CurrentThread.Priority = ThreadPriority.AboveNormal;
-          Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.AboveNormal;
-        }
-        else if (MPThreadPriority == "High")
-        {
-          Thread.CurrentThread.Priority = ThreadPriority.Highest;
-          Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.High;
-        }
-        else if (MPThreadPriority == "BelowNormal")
-        {
-          Thread.CurrentThread.Priority = ThreadPriority.BelowNormal;
-          Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.BelowNormal;
+          case "AboveNormal":
+            Thread.CurrentThread.Priority = ThreadPriority.AboveNormal;
+            Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.AboveNormal;
+            break;
+          case "High":
+            Thread.CurrentThread.Priority = ThreadPriority.Highest;
+            Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.High;
+            break;
+          case "BelowNormal":
+            Thread.CurrentThread.Priority = ThreadPriority.BelowNormal;
+            Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.BelowNormal;
+            break;
         }
         autoHideTaskbar = xmlreader.GetValueAsBool("general", "hidetaskbar", false);
         _startupDelay = xmlreader.GetValueAsBool("general", "delay startup", false)
@@ -321,7 +340,7 @@ public class MediaPortalApp : D3DApp, IRender
       if (watchdogEnabled)
       {
         //StreamWriter sw = new StreamWriter(Application.StartupPath + "\\mediaportal.running", false);
-        // BAV: fixing mantis bug 1216: Watcher process uses a wrong folder for integrity file
+        // BAV: fixing mantis 1216: Watcher process uses a wrong folder for integrity file
         using (StreamWriter sw = new StreamWriter(Config.GetFile(Config.Dir.Config, "mediaportal.running"), false))
         {
           sw.WriteLine("running");
@@ -438,7 +457,7 @@ public class MediaPortalApp : D3DApp, IRender
         var strSkin = String.Empty;
         using (Settings xmlreader = new MPSettings())
         {
-            xmlreader.GetValueAsString("skin", "name", "Default");
+          xmlreader.GetValueAsString("skin", "name", "Default");
         }
         Config.SkinName = strSkin;
         GUIGraphicsContext.Skin = strSkin;
@@ -525,7 +544,8 @@ public class MediaPortalApp : D3DApp, IRender
           {
             if (splashScreen != null)
             {
-              splashScreen.SetInformation(String.Format(GUILocalizeStrings.Get(61), i.ToString(CultureInfo.InvariantCulture)));
+              splashScreen.SetInformation(String.Format(GUILocalizeStrings.Get(61),
+                                                        i.ToString(CultureInfo.InvariantCulture)));
               // Waiting {0} second(s) before startup...
             }
             Application.DoEvents();
@@ -559,7 +579,8 @@ public class MediaPortalApp : D3DApp, IRender
           Log.Debug("Main: Verifying Windows Media Player");
 
           Version aParamVersion;
-          if (FilterChecker.CheckFileVersion(Environment.SystemDirectory + "\\wmp.dll", windowsMediaPlayerVersion + ".0.0000.0000",
+          if (FilterChecker.CheckFileVersion(Environment.SystemDirectory + "\\wmp.dll",
+                                             windowsMediaPlayerVersion + ".0.0000.0000",
                                              out aParamVersion))
           {
             Log.Info("Main: Windows Media Player version {0} installed", aParamVersion);
@@ -703,10 +724,12 @@ public class MediaPortalApp : D3DApp, IRender
     }
     else
     {
-      var msg = "The file MediaPortalDirs.xml has been changed by a recent update in the MediaPortal application directory.\n\n";
+      var msg =
+        "The file MediaPortalDirs.xml has been changed by a recent update in the MediaPortal application directory.\n\n";
       msg += "You have to open the file ";
       msg += Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) + @"\Team MediaPortal\MediaPortalDirs.xml";
-      msg += " with an editor, update it with all changes and SAVE it at least once to start up MediaPortal successfully after this update.\n\n";
+      msg +=
+        " with an editor, update it with all changes and SAVE it at least once to start up MediaPortal successfully after this update.\n\n";
       msg += "If you are not using windows user profiles for MediaPortal's configuration management, ";
       msg += "just delete the whole directory mentioned above and reconfigure MediaPortal.";
       const string msg2 = "\n\n\nDo you want to open your local file now?";
@@ -718,7 +741,8 @@ public class MediaPortalApp : D3DApp, IRender
         splashScreen = null;
       }
 #endif
-      var result = MessageBox.Show(msg + msg2, "MediaPortal - Update Conflict", MessageBoxButtons.YesNo, MessageBoxIcon.Stop);
+      var result = MessageBox.Show(msg + msg2, "MediaPortal - Update Conflict", MessageBoxButtons.YesNo,
+                                   MessageBoxIcon.Stop);
       try
       {
         if (result == DialogResult.Yes)
@@ -800,7 +824,9 @@ public class MediaPortalApp : D3DApp, IRender
     Log.Info("Main: Checking for running MediaPortal instance");
     Log.Info(@"Main: Deleting old log\capture.log");
     Utils.FileDelete(Config.GetFile(Config.Dir.Log, "capture.log"));
-    MinimumSize = GUIGraphicsContext.currentScreen.Bounds.Width > clientSizeX ? new Size(clientSizeX + 8, clientSizeY + 27) : new Size(720, 576);
+    MinimumSize = GUIGraphicsContext.currentScreen.Bounds.Width > clientSizeX
+                    ? new Size(clientSizeX + 8, clientSizeY + 27)
+                    : new Size(720, 576);
     Text = "MediaPortal";
     GUIGraphicsContext.form = this;
     GUIGraphicsContext.graphics = null;
@@ -811,7 +837,8 @@ public class MediaPortalApp : D3DApp, IRender
       {
         AutoHideMouse = xmlreader.GetValueAsBool("general", "autohidemouse", true);
         GUIGraphicsContext.MouseSupport = xmlreader.GetValueAsBool("gui", "mousesupport", false);
-        GUIGraphicsContext.AllowRememberLastFocusedItem = xmlreader.GetValueAsBool("gui", "allowRememberLastFocusedItem", false);
+        GUIGraphicsContext.AllowRememberLastFocusedItem = xmlreader.GetValueAsBool("gui", "allowRememberLastFocusedItem",
+                                                                                   false);
         GUIGraphicsContext.DBLClickAsRightClick = xmlreader.GetValueAsBool("general", "dblclickasrightclick", false);
         MinimizeOnStartup = xmlreader.GetValueAsBool("general", "minimizeonstartup", false);
         MinimizeOnGuiExit = xmlreader.GetValueAsBool("general", "minimizeonexit", false);
@@ -1751,9 +1778,9 @@ public class MediaPortalApp : D3DApp, IRender
       var autosize = xmlreader.GetValueAsBool("gui", "autosize", true);
       if (autosize && !GUIGraphicsContext.Fullscreen)
       {
-        Size = GUIGraphicsContext.currentScreen.Bounds.Width > GUIGraphicsContext.SkinSize.Width 
-          ? new Size(GUIGraphicsContext.SkinSize.Width + 8, GUIGraphicsContext.SkinSize.Height + 54) 
-          : new Size(GUIGraphicsContext.SkinSize.Width, GUIGraphicsContext.SkinSize.Height);
+        Size = GUIGraphicsContext.currentScreen.Bounds.Width > GUIGraphicsContext.SkinSize.Width
+                 ? new Size(GUIGraphicsContext.SkinSize.Width + 8, GUIGraphicsContext.SkinSize.Height + 54)
+                 : new Size(GUIGraphicsContext.SkinSize.Width, GUIGraphicsContext.SkinSize.Height);
         if (GUIGraphicsContext.IsDirectX9ExUsed())
         {
           SwitchFullScreenOrWindowed(true);
@@ -2659,7 +2686,9 @@ public class MediaPortalApp : D3DApp, IRender
 
             //When MyPictures Plugin shows the pictures we want to stop the slide show only, not the player
             if (
-              (GUIWindow.Window) (Enum.Parse(typeof (GUIWindow.Window), GUIWindowManager.ActiveWindow.ToString(CultureInfo.InvariantCulture))) ==
+              (GUIWindow.Window)
+              (Enum.Parse(typeof (GUIWindow.Window),
+                          GUIWindowManager.ActiveWindow.ToString(CultureInfo.InvariantCulture))) ==
               GUIWindow.Window.WINDOW_SLIDESHOW)
             {
               break;
@@ -2910,7 +2939,7 @@ public class MediaPortalApp : D3DApp, IRender
   {
     // Calculate Mouse position
     var ptScreenUL = new Point {X = Cursor.Position.X, Y = Cursor.Position.Y};
-    Point ptClientUL = PointToClient(ptScreenUL);
+    var ptClientUL = PointToClient(ptScreenUL);
     var iCursorX = ptClientUL.X;
     var iCursorY = ptClientUL.Y;
     var fX = (GUIGraphicsContext.Width)/((float) ClientSize.Width);
@@ -3007,7 +3036,7 @@ public class MediaPortalApp : D3DApp, IRender
     var actionMove = new Action(Action.ActionType.ACTION_MOUSE_MOVE, x, y);
     GUIGraphicsContext.OnAction(actionMove);
     var action = new Action(Action.ActionType.ACTION_MOUSE_DOUBLECLICK, x, y)
-                      {MouseButton = e.Button, SoundFileName = "click.wav"};
+                   {MouseButton = e.Button, SoundFileName = "click.wav"};
     if (action.SoundFileName.Length > 0 && !g_Player.Playing)
     {
       Utils.PlaySound(action.SoundFileName, false, true);
@@ -3152,7 +3181,7 @@ public class MediaPortalApp : D3DApp, IRender
         var y = (fY*m_iLastMousePositionY) - GUIGraphicsContext.OffsetY;
         bMouseClickFired = false;
         var action = new Action(Action.ActionType.ACTION_MOUSE_CLICK, x, y)
-                          {MouseButton = eLastMouseClickEvent.Button, SoundFileName = "click.wav"};
+                       {MouseButton = eLastMouseClickEvent.Button, SoundFileName = "click.wav"};
         if (action.SoundFileName.Length > 0 && !g_Player.Playing)
         {
           Utils.PlaySound(action.SoundFileName, false, true);
@@ -3615,9 +3644,9 @@ public class MediaPortalApp : D3DApp, IRender
   /// <returns> A string containing the current time. </returns>
   protected string GetTime()
   {
-    return DateTime.Now.ToString(_useLongDateFormat 
-      ? Thread.CurrentThread.CurrentCulture.DateTimeFormat.LongTimePattern 
-      : Thread.CurrentThread.CurrentCulture.DateTimeFormat.ShortTimePattern);
+    return DateTime.Now.ToString(_useLongDateFormat
+                                   ? Thread.CurrentThread.CurrentCulture.DateTimeFormat.LongTimePattern
+                                   : Thread.CurrentThread.CurrentCulture.DateTimeFormat.ShortTimePattern);
   }
 
   protected string GetDay()
@@ -4012,7 +4041,7 @@ public class MediaPortalApp : D3DApp, IRender
   /// </summary>
   /// <remarks>
   ///   <para> The trick is to create the following registry value: HKLM\SYSTEM\CurrentControlSet\Services\usb\USBBIOSx and set it to 0. </para>
-  ///   <para> This method checks whether the <b>enables3trick</b> option in the <b>general</b> section of the mediaportal.xml file is enabled (which is the default), before setting the value. The reason for this configuration option is a bug in the S3 implementation of various (Asus) motherboards like the A7NX8 and A7VX8 that causes the computer to reboot immediately after hibernating. </para>
+  ///   <para> This method checks whether the <b>enables3trick</b> option in the <b>general</b> section of the mediaportal.xml file is enabled (which is the default), before setting the value. The reason for this configuration option is a defect in the S3 implementation of various (Asus) motherboards like the A7NX8 and A7VX8 that causes the computer to reboot immediately after hibernating. </para>
   ///   <para> The previous implementation of this method also created an USBBIOSHACKS value, which according to this article http://support.microsoft.com/kb/841858/en-us should not be used. That is why the current implementation deletes this key if it still exists. </para>
   /// </remarks>
   private static void EnableS3Trick()
