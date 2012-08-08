@@ -46,87 +46,99 @@ using WPFMediaKit.DirectX;
 
 namespace MediaPortal
 {
+  #region D3Dapp
+
   /// <summary>
   /// The base class for all the graphics (D3D) samples, it derives from windows forms
   /// </summary>
   public class D3DApp : MPForm
   {
+    #region internal attributes
+  
     internal static int ScreenNumberOverride; // 0 or higher means it is set
+    
+    #endregion
 
-    protected static bool FullscreenOverride;
-    protected static bool WindowedOverride;
-    protected static string StrSkinOverride;
-    protected string Skin;
-    protected PlayListPlayer PlaylistPlayer;
-    protected Size OurClientSize;
-    protected bool MinimizeOnStartup; // Minimize to tray on startup and on GUI exit
-    protected bool MinimizeOnGuiExit;
-    protected bool ShuttingDown;
-    protected bool FirstTimeWindowDisplayed;
-    protected bool AutoHideMouse;
-    protected DateTime MouseTimeOutTimer;
-    protected bool ResizeOngoing; // this is true only when user is resizing the form
-    protected int Frames; // Number of frames since our last update
-    protected int Volume;
-    protected bool Maximized; // Are we maximized?
-    protected bool ShowCursor;
-    protected bool Windowed; // Internal variables for the state of the app
-    protected bool Ready;
-    protected string FrameStatsLine1; // 1st string to hold frame stats
-    protected string FrameStatsLine2; // 2nd string to hold frame stats
-    protected bool AutoHideTaskbar = true;
-    protected bool UseEnhancedVideoRenderer;
+    #region protected attributes
 
-    private static Stopwatch _clockWatch;
-    private readonly Control _renderTarget;
-    private readonly bool _useExclusiveDirectXMode;
-    private readonly bool _alwaysOnTopConfig;
-    private readonly bool _disableMouseEvents;
-    private readonly bool _showCursorWhenFullscreen; // Whether to show cursor when fullscreen
-    private readonly PresentParameters _presentParams; // Parameters for CreateDevice/Reset
-    private readonly D3DSettings _graphicsSettings;
-    private readonly D3DEnumeration _enumerationSettings; // We need to keep track of our enumeration settings
+    protected static bool    FullscreenOverride;       //
+    protected static bool    WindowedOverride;         //
+    protected static string  StrSkinOverride;          //
+    protected string         Skin;                     //
+    protected string         FrameStatsLine1;          // 1st string to hold frame stats
+    protected string         FrameStatsLine2;          // 2nd string to hold frame stats
+    protected bool           MinimizeOnStartup;        // Minimize to tray on startup and on GUI exit
+    protected bool           MinimizeOnGuiExit;        //
+    protected bool           ShuttingDown;             //
+    protected bool           FirstTimeWindowDisplayed; //
+    protected bool           AutoHideMouse;            //
+    protected bool           ResizeOngoing;            // this is true only when user is resizing the form
+    protected bool           Maximized;                // Are we maximized?
+    protected bool           ShowCursor;               //
+    protected bool           Windowed;                 // Internal variables for the state of the app
+    protected bool           Ready;                    //
+    protected bool           AutoHideTaskbar = true;   // 
+    protected bool           UseEnhancedVideoRenderer; //
+    protected int            Frames;                   // Number of frames since our last update
+    protected int            Volume;                   //
+    protected PlayListPlayer PlaylistPlayer;           //
+    protected DateTime       MouseTimeOutTimer;        //
+    protected Size           OurClientSize;            //
 
-    private MainMenu _menuStripMain;
-    private MenuItem _menuItemFile;
-    private MenuItem _menuItemChangeDevice;
-    private MenuItem _menuBreakFile;
-    private MenuItem _menuItemExit;
-    private bool _miniTvMode; // minitv means minimum size < 720, always on top, focus may leave
-    private bool _isClosing; // Are we closing?
-    private bool _lastShowCursor;
-    private bool _active;
-    private bool _fromTray; // tracks if we restored from tray
-    private bool _toggleFullWindowed;
+    #endregion
 
-    private bool _needReset;
-    private bool _ignoreNextResizeEvent; // True if next event should be ignored (min/max happened)
-    private FormWindowState _windowState;
-    private Rectangle _oldBounds;
-    private MenuItem _menuItemOptions;
-    private MenuItem _menuItemConfiguration;
-    private MenuItem _menuItemWizards;
-    private MenuItem _menuItemDvd;
-    private MenuItem _menuItemMovies;
-    private MenuItem _menuItemMusic;
-    private MenuItem _menuItemPictures;
-    private MenuItem _menuItemTelevision;
-    private MenuItem _menuItemContext;
-    private MenuItem _menuItem5;
-    private MenuItem _menuItemFullscreen;
-    private MenuItem _menuItemMiniTv;
-    private IContainer _components;
-    private NotifyIcon _notifyIcon;
-    private ContextMenu _contextMenu;
-    private bool _wasPlayingVideo;
-    private int _lastActiveWindow;
-    private double _currentPlayerPos;
-    private string _strCurrentFile;
-    private PlayListType _currentPlayListType;
-    private PlayList _currentPlayList;
-    private bool _alwaysOnTop;
-    private Win32API.MSG _msgApi;
-    private long _lastTime;
+    #region private attributes
+
+    private static   Stopwatch         _clockWatch;               //
+    private readonly Control           _renderTarget;             //
+    private readonly PresentParameters _presentParams;            // Parameters for CreateDevice/Reset
+    private readonly D3DSettings       _graphicsSettings;         //
+    private readonly D3DEnumeration    _enumerationSettings;      // We need to keep track of our enumeration settings
+    private readonly bool              _useExclusiveDirectXMode;  // 
+    private readonly bool              _alwaysOnTopConfig;        //
+    private readonly bool              _disableMouseEvents;       //
+    private readonly bool              _showCursorWhenFullscreen; // Whether to show cursor when fullscreen
+    private bool                       _miniTvMode;               // minitv means minimum size < 720, always on top, focus may leave
+    private bool                       _isClosing;                // Are we closing?
+    private bool                       _lastShowCursor;           //
+    private bool                       _active;                   //
+    private bool                       _fromTray;                 // tracks if we restored from tray
+    private bool                       _toggleFullWindowed;       //
+    private bool                       _needReset;                //
+    private bool                       _ignoreNextResizeEvent;    // True if next event should be ignored (min/max happened)
+    private bool                       _wasPlayingVideo;          //
+    private bool                       _alwaysOnTop;              //
+    private int                        _lastActiveWindow;         //
+    private long                       _lastTime;                 //
+    private double                     _currentPlayerPos;         //
+    private string                     _currentFile;              //
+    private FormWindowState            _windowState;              //
+    private Rectangle                  _oldBounds;                //
+    private IContainer                 _components;               //
+    private MainMenu                   _menuStripMain;            //
+    private MenuItem                   _menuItemFile;             //
+    private MenuItem                   _menuItemChangeDevice;     //
+    private MenuItem                   _menuBreakFile;            //
+    private MenuItem                   _menuItemExit;             //
+    private MenuItem                   _menuItemOptions;          //
+    private MenuItem                   _menuItemConfiguration;    //
+    private MenuItem                   _menuItemWizards;          //
+    private MenuItem                   _menuItemDVD;              //
+    private MenuItem                   _menuItemMovies;           //
+    private MenuItem                   _menuItemMusic;            //
+    private MenuItem                   _menuItemPictures;         //
+    private MenuItem                   _menuItemTV;               //
+    private MenuItem                   _menuItemContext;          //
+    private MenuItem                   _menuItem5;                //
+    private MenuItem                   _menuItemFullscreen;       //
+    private MenuItem                   _menuItemMiniTv;           //
+    private NotifyIcon                 _notifyIcon;               //
+    private ContextMenu                _contextMenu;              //
+    private PlayListType               _currentPlayListType;      //
+    private PlayList                   _currentPlayList;          //
+    private Win32API.MSG               _msgApi;                   //
+    
+    #endregion
 
     #region constructor
 
@@ -199,25 +211,6 @@ namespace MediaPortal
 
     #endregion
 
-    #region public methods
-
-    /// <summary>
-    /// 
-    /// </summary>
-    public override sealed string Text
-    {
-      get
-      {
-        return base.Text;
-      }
-      set
-      {
-        base.Text = value;
-      }
-    }
-
-    #endregion
-    
     #region protected methods
     
     /// <summary>
@@ -468,6 +461,81 @@ namespace MediaPortal
       Activate();
     }
 
+
+    /// <summary>
+    /// 
+    /// </summary>
+    protected void ToggleFullWindowed()
+    {
+      _toggleFullWindowed = true;
+      Log.Info("D3D: Fullscreen / windowed mode toggled");
+      Maximized = !Maximized;
+      // Force player to stop so as not to crash during toggle
+      if (GUIGraphicsContext.Vmr9Active)
+      {
+        Log.Info("D3D: Vmr9Active - Stopping media");
+        g_Player.Stop();
+      }
+      GUITextureManager.CleanupThumbs();
+      GUITextureManager.Dispose();
+      GUIFontManager.Dispose();
+      if (Maximized)
+      {
+        Log.Info("D3D: Switching windowed mode -> fullscreen");
+        if (AutoHideTaskbar)
+        {
+          HideTaskBar();
+        }
+
+        FormBorderStyle = FormBorderStyle.None;
+        MaximizeBox = false;
+        MinimizeBox = false;
+        Menu = null;
+        _oldBounds = Bounds;
+        var newBounds = GUIGraphicsContext.currentScreen.Bounds;
+        Bounds = newBounds;
+        Update();
+        Log.Info("D3D: Switching windowed mode -> fullscreen done - Maximized: {0}", Maximized);
+        Log.Info("D3D: Client size: {0}x{1} - Screen: {2}x{3}",
+                 ClientSize.Width, ClientSize.Height,
+                 GUIGraphicsContext.currentScreen.Bounds.Width, GUIGraphicsContext.currentScreen.Bounds.Height);
+        SwitchFullScreenOrWindowed(false);
+      }
+      else
+      {
+        Log.Info("D3D: Switching fullscreen -> windowed mode");
+        if (AutoHideTaskbar)
+        {
+          HideTaskBar(false);
+        }
+        WindowState = FormWindowState.Normal;
+        FormBorderStyle = FormBorderStyle.Sizable;
+        MaximizeBox = true;
+        MinimizeBox = true;
+        Menu = _menuStripMain;
+        var newBounds = new Rectangle(_oldBounds.X, _oldBounds.Y, _oldBounds.Width, _oldBounds.Height);
+        using (Settings xmlreader = new MPSettings())
+        {
+          var autosize = xmlreader.GetValueAsBool("gui", "autosize", true);
+          if (autosize && !GUIGraphicsContext.Fullscreen)
+          {
+            newBounds.Height = GUIGraphicsContext.SkinSize.Height;
+            newBounds.Width = GUIGraphicsContext.SkinSize.Width;
+          }
+        }
+        Bounds = newBounds;
+        Update();
+        Log.Info("D3D: Switching fullscreen -> windowed mode done - Maximized: {0}", Maximized);
+        Log.Info("D3D: Client size: {0}x{1} - Screen: {2}x{3}",
+                 ClientSize.Width, ClientSize.Height,
+                 GUIGraphicsContext.currentScreen.Bounds.Width, GUIGraphicsContext.currentScreen.Bounds.Height);
+        SwitchFullScreenOrWindowed(true);
+      }
+      OnDeviceReset(null, null);
+      _toggleFullWindowed = false;
+    }
+
+
     /// <summary>
     /// Called when our sample has nothing else to do, and it's time to render
     /// </summary>
@@ -619,7 +687,7 @@ namespace MediaPortal
           }
 
           Log.Debug("d3dapp: EnvironmentResized()");
-          EnvironmentResized(GUIGraphicsContext.DX9Device, new CancelEventArgs());
+          EnvironmentResized(new CancelEventArgs());
         }
         GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.RUNNING;
 
@@ -778,10 +846,11 @@ namespace MediaPortal
     /// 
     /// </summary>
     /// <param name="force"></param>
-    protected void MinimizeToTray(bool force = true)
+    protected void MinimizeToTray(bool force = false)
     {
-      var fullScreenMode = Menu == null;
-      if (fullScreenMode || force)
+      //var fullScreenMode = Menu == null;
+      //if (fullScreenMode || force)
+      if (true)
       {
         Log.Info("D3D: Minimizing to tray");
         _fromTray = false;
@@ -853,12 +922,189 @@ namespace MediaPortal
     /// <summary>
     /// 
     /// </summary>
+    private void InitializeComponent()
+    {
+      _components = new Container();
+      var resources = new ComponentResourceManager(typeof(D3DApp));
+      _menuStripMain = new MainMenu(_components);
+      _menuItemFile = new MenuItem();
+      _menuItemExit = new MenuItem();
+      _menuItemOptions = new MenuItem();
+      _menuItemFullscreen = new MenuItem();
+      _menuItemMiniTv = new MenuItem();
+      _menuItemConfiguration = new MenuItem();
+      _menuItemWizards = new MenuItem();
+      _menuItemDVD = new MenuItem();
+      _menuItemMovies = new MenuItem();
+      _menuItemMusic = new MenuItem();
+      _menuItemPictures = new MenuItem();
+      _menuItemTV = new MenuItem();
+      _menuItemChangeDevice = new MenuItem();
+      _menuBreakFile = new MenuItem();
+      _notifyIcon = new NotifyIcon(_components);
+      _contextMenu = new ContextMenu();
+      _menuItemContext = new MenuItem();
+      _menuItem5 = new MenuItem();
+      SuspendLayout();
+      // 
+      // menuStripMain
+      // 
+      _menuStripMain.MenuItems.AddRange(new[]
+                                              {
+                                                _menuItemFile,
+                                                _menuItemOptions,
+                                                _menuItemWizards
+                                              });
+      // 
+      // menuItemFile
+      // 
+      _menuItemFile.Index = 0;
+      _menuItemFile.MenuItems.AddRange(new[]
+                                             {
+                                               _menuItemExit
+                                             });
+      _menuItemFile.Text = Resources.D3DApp_menuItem_File;
+      // 
+      // menuItemExit
+      // 
+      _menuItemExit.Index = 0;
+      _menuItemExit.Text = Resources.D3DApp_menuItem_Exit;
+      _menuItemExit.Click += Exit;
+      // 
+      // menuItemOptions
+      // 
+      _menuItemOptions.Index = 1;
+      _menuItemOptions.MenuItems.AddRange(new[]
+                                                {
+                                                  _menuItemFullscreen,
+                                                  _menuItemMiniTv,
+                                                  _menuItemConfiguration
+                                                });
+      _menuItemOptions.Text = Resources.D3DApp_menuItem_Options;
+      // 
+      // menuItemFullscreen
+      // 
+      _menuItemFullscreen.Index = 0;
+      _menuItemFullscreen.Text = Resources.D3DApp_menuItem_Fullscreen;
+      _menuItemFullscreen.Click += MenuItemFullscreen;
+      // 
+      // menuItemMiniTv
+      // 
+      _menuItemMiniTv.Index = 1;
+      _menuItemMiniTv.Text = Resources.D3DApp_menuItem_MiniTv;
+      _menuItemMiniTv.Click += MenuItemMiniTV;
+      // 
+      // menuItemConfiguration
+      // 
+      _menuItemConfiguration.Index = 2;
+      _menuItemConfiguration.Shortcut = Shortcut.F2;
+      _menuItemConfiguration.Text = Resources.D3DApp_menuItem_Configuration;
+      _menuItemConfiguration.Click += MenuItemConfiguration;
+      // 
+      // menuItemWizards
+      // 
+      _menuItemWizards.Index = 2;
+      _menuItemWizards.MenuItems.AddRange(new[]
+                                                {
+                                                  _menuItemDVD,
+                                                  _menuItemMovies,
+                                                  _menuItemMusic,
+                                                  _menuItemPictures,
+                                                  _menuItemTV
+                                                });
+      _menuItemWizards.Text = Resources.D3DApp_menuItem_Wizards;
+      // 
+      // menuItemDVD
+      // 
+      _menuItemDVD.Index = 0;
+      _menuItemDVD.Text = Resources.D3DApp_menuItem_DVD;
+      _menuItemDVD.Click += MenuItemDVD;
+      // 
+      // menuItemMovies
+      // 
+      _menuItemMovies.Index = 1;
+      _menuItemMovies.Text = Resources.D3DApp_menuItem_Movies;
+      _menuItemMovies.Click += MenuItemMovies;
+      // 
+      // menuItemMusic
+      // 
+      _menuItemMusic.Index = 2;
+      _menuItemMusic.Text = Resources.D3DApp_menuItem_Music;
+      _menuItemMusic.Click += MenuItemMusic;
+      // 
+      // menuItemPictures
+      // 
+      _menuItemPictures.Index = 3;
+      _menuItemPictures.Text = Resources.D3DApp_menuItem_Pictures;
+      _menuItemPictures.Click += MenuItemPictures;
+      // 
+      // menuItemTelevision
+      // 
+      _menuItemTV.Index = 4;
+      _menuItemTV.Text = Resources.D3DApp_menuItem_Television;
+      _menuItemTV.Click += MenuItemTV;
+      // 
+      // menuItemChangeDevice
+      // 
+      _menuItemChangeDevice.Index = -1;
+      _menuItemChangeDevice.Text = "";
+      // 
+      // menuBreakFile
+      // 
+      _menuBreakFile.Index = -1;
+      _menuBreakFile.Text = Resources.D3DApp_MenuItem_Break;
+      // 
+      // notifyIcon
+      // 
+      _contextMenu.MenuItems.Clear();
+      _contextMenu.MenuItems.Add(Resources.D3DApp_NotifyIcon_Restore, NotifyIconRestore);
+      _contextMenu.MenuItems.Add(Resources.D3DApp_NotifyIcon_Exit, NotifyIconExit);
+      _notifyIcon.Text = Resources.D3DApp_NotifyIcon_MediaPortal;
+      _notifyIcon.Icon = ((Icon)(resources.GetObject("_notifyIcon.TrayIcon")));
+      _notifyIcon.ContextMenu = _contextMenu;
+      _notifyIcon.DoubleClick += NotifyIconRestore;
+      // 
+      // menuItemContext
+      // 
+      _menuItemContext.Index = 0;
+      _menuItemContext.MenuItems.AddRange(new[]
+                                                {
+                                                  _menuItem5
+                                                });
+      _menuItemContext.Text = "";
+      // 
+      // menuItem5
+      // 
+      _menuItem5.Index = 0;
+      _menuItem5.Text = "";
+      // 
+      // D3DApp
+      // 
+      AutoScaleDimensions = new SizeF(6F, 13F);
+      ClientSize = new Size(720, 576);
+      KeyPreview = true;
+      MinimumSize = new Size(100, 100);
+      Name = "D3DApp";
+      Load += OnLoad;
+      MouseDoubleClick += OnMouseDoubleClick;
+      MouseDown += OnClick;
+      Closing += OnClosing;
+      KeyPress += OnKeyPress;
+      MouseMove += OnMouseMove;
+      KeyDown += OnKeyDown;
+      ResumeLayout(false);
+    }
+
+
+    /// <summary>
+    /// 
+    /// </summary>
     /// <param name="caps"></param>
     /// <param name="vertexProcessingType"></param>
     /// <param name="adapterFormat"></param>
     /// <param name="backBufferFormat"></param>
     /// <returns></returns>
-    private bool ConfirmDevice(Caps caps, VertexProcessingType vertexProcessingType, Format adapterFormat, Format backBufferFormat)
+    private static bool ConfirmDevice(Caps caps, VertexProcessingType vertexProcessingType, Format adapterFormat, Format backBufferFormat)
     {
       return true;
     }
@@ -1431,9 +1677,8 @@ namespace MediaPortal
     /// <summary>
     /// Fired when our environment was resized
     /// </summary>
-    /// <param name="sender">the device that's resizing our environment</param>
     /// <param name="e">Set the cancel member to true to turn off automatic device reset</param>
-    private void EnvironmentResized(object sender, CancelEventArgs e)
+    private void EnvironmentResized(CancelEventArgs e)
     {
       // Check to see if we're closing or changing the form style
       if (_isClosing)
@@ -1489,14 +1734,14 @@ namespace MediaPortal
         {
           _currentPlayList.Add(itemNew);
         }
-        _strCurrentFile = PlaylistPlayer.Get(PlaylistPlayer.CurrentSong);
-        if (_strCurrentFile.Equals(string.Empty) && g_Player.IsDVD)
+        _currentFile = PlaylistPlayer.Get(PlaylistPlayer.CurrentSong);
+        if (_currentFile.Equals(string.Empty) && g_Player.IsDVD)
         {
-          _strCurrentFile = g_Player.CurrentFile;
+          _currentFile = g_Player.CurrentFile;
         }
         Log.Info(
           "D3D: Form resized - Stopping media - Current playlist: Type: {0} / Size: {1} / Current item: {2} / Filename: {3} / Position: {4}",
-          _currentPlayListType, _currentPlayList.Count, PlaylistPlayer.CurrentSong, _strCurrentFile, _currentPlayerPos);
+          _currentPlayListType, _currentPlayList.Count, PlaylistPlayer.CurrentSong, _currentFile, _currentPlayerPos);
         g_Player.Stop();
 
         _lastActiveWindow = GUIWindowManager.ActiveWindow;
@@ -1514,7 +1759,7 @@ namespace MediaPortal
         _wasPlayingVideo = false;
 
         // we were watching some audio/video
-        Log.Info("D3D: RestorePlayers - Resuming: {0}", _strCurrentFile);
+        Log.Info("D3D: RestorePlayers - Resuming: {0}", _currentFile);
         PlaylistPlayer.Init();
         PlaylistPlayer.Reset();
         PlaylistPlayer.CurrentPlaylistType = _currentPlayListType;
@@ -1546,7 +1791,7 @@ namespace MediaPortal
         }
         else
         {
-          PlaylistPlayer.Play(_strCurrentFile); // some standard audio/video
+          PlaylistPlayer.Play(_currentFile); // some standard audio/video
         }
 
         if (g_Player.Playing)
@@ -1618,15 +1863,39 @@ namespace MediaPortal
       }
     }
 
-    #endregion
+
+    /// <summary>
+    /// 
+    /// </summary>
+    private static void StartFrameClock()
+    {
+      _clockWatch.Reset();
+      _clockWatch.Start();
+    }
 
 
     /// <summary>
     /// 
     /// </summary>
-    /// <param name="sender"></param>
-    /// <param name="e"></param>
-    private void OnSetup(object sender, EventArgs e)
+    private static void WaitForFrameClock()
+    {
+      // frame limiting code.
+      // sleep as long as there are ticks left for this frame
+      _clockWatch.Stop();
+      var timeElapsed = _clockWatch.ElapsedTicks;
+      if (timeElapsed < GUIGraphicsContext.DesiredFrameTime)
+      {
+        var milliSecondsLeft = (((GUIGraphicsContext.DesiredFrameTime - timeElapsed) * 1000) / Stopwatch.Frequency);
+        milliSecondsLeft = milliSecondsLeft == 0 ? 1 : milliSecondsLeft;
+        Thread.Sleep((int)milliSecondsLeft);
+      }
+    }
+
+
+    /// <summary>
+    /// 
+    /// </summary>
+    private void StartConfiguration()
     {
       const string processName = "Configuration.exe";
 
@@ -1655,11 +1924,10 @@ namespace MediaPortal
       Util.Utils.StartProcess(Config.GetFile(Config.Dir.Base, "Configuration.exe"), "", false, false);
     }
 
-
     /// <summary>
     /// Will end the simulation
     /// </summary>
-    private void ExitSample(object sender, EventArgs e)
+    private void Exit(object sender, EventArgs e)
     {
       ShuttingDown = true;
       Close();
@@ -1667,38 +1935,52 @@ namespace MediaPortal
 
 
     /// <summary>
-    /// Clean up any resources
+    /// 
     /// </summary>
-    protected override void Dispose(bool disposing)
+    private void ToggleMiniTV()
     {
-      CleanupEnvironment();
-
-      if (_notifyIcon != null)
+      if (!Windowed)
       {
-        //we dispose our tray icon here
-        _notifyIcon.Dispose();
+        return; // only affection window mode
       }
 
-      base.Dispose(disposing);
+      _miniTvMode = !_miniTvMode; // toggle
 
-      if (AutoHideTaskbar)
+      if (_miniTvMode)
       {
-        HideTaskBar(false);
+        MinimumSize = new Size(720 / 2, 576 / 2);
+        _alwaysOnTop = true;
+        FormBorderStyle = FormBorderStyle.SizableToolWindow;
+        Menu = null;
       }
+      else
+      {
+        MinimumSize = new Size(720, 576);
+        _alwaysOnTop = _alwaysOnTopConfig;
+        FormBorderStyle = FormBorderStyle.Sizable;
+        Menu = _menuStripMain;
+
+        SwitchFullScreenOrWindowed(true);
+      }
+
+      Size = MinimumSize;
+      TopMost = _alwaysOnTop;
+
+      _menuItemMiniTv.Checked = _miniTvMode;
     }
 
+    #endregion
+
+    #region menu items
 
     /// <summary>
     /// 
     /// </summary>
+    /// <param name="sender"></param>
     /// <param name="e"></param>
-    protected override void OnKeyPress(KeyPressEventArgs e)
+    private void MenuItemConfiguration(object sender, EventArgs e)
     {
-      // Allow the control to handle the keystroke now
-      if (!e.Handled)
-      {
-        base.OnKeyPress(e);
-      }
+      StartConfiguration();
     }
 
 
@@ -1707,9 +1989,19 @@ namespace MediaPortal
     /// </summary>
     /// <param name="sender"></param>
     /// <param name="e"></param>
-    private void MenuItem2Click(object sender, EventArgs e)
+    private void MenuItemTV(object sender, EventArgs e)
     {
-      OnSetup(sender, e);
+      g_Player.Stop();
+
+      if (GUIGraphicsContext.DX9Device.PresentationParameters.Windowed == false)
+      {
+        SwitchFullScreenOrWindowed(true);
+      }
+      using (Settings xmlreader = new MPSettings())
+      {
+        xmlreader.Clear();
+      }
+      Process.Start(Config.GetFile(Config.Dir.Base, "configuration.exe"), @"/wizard /section=wizards\television.xml");
     }
 
 
@@ -1718,9 +2010,148 @@ namespace MediaPortal
     /// </summary>
     /// <param name="sender"></param>
     /// <param name="e"></param>
-    private void D3DAppLoad(object sender, EventArgs e)
+    private void MenuItemPictures(object sender, EventArgs e)
     {
-      Application.Idle += ApplicationIdle;
+      g_Player.Stop();
+      if (GUIGraphicsContext.DX9Device.PresentationParameters.Windowed == false)
+      {
+        SwitchFullScreenOrWindowed(true);
+      }
+      using (Settings xmlreader = new MPSettings())
+      {
+        xmlreader.Clear();
+      }
+      Process.Start(Config.GetFile(Config.Dir.Base, "configuration.exe"), @"/wizard /section=wizards\pictures.xml");
+    }
+
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="sender"></param>
+    /// <param name="e"></param>
+    private void MenuItemMusic(object sender, EventArgs e)
+    {
+      g_Player.Stop();
+      if (GUIGraphicsContext.DX9Device.PresentationParameters.Windowed == false)
+      {
+        SwitchFullScreenOrWindowed(true);
+      }
+      using (Settings xmlreader = new MPSettings())
+      {
+        xmlreader.Clear();
+      }
+      Process.Start(Config.GetFile(Config.Dir.Base, "configuration.exe"), @"/wizard /section=wizards\music.xml");
+    }
+
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="sender"></param>
+    /// <param name="e"></param>
+    private void MenuItemMovies(object sender, EventArgs e)
+    {
+      g_Player.Stop();
+      if (GUIGraphicsContext.DX9Device.PresentationParameters.Windowed == false)
+      {
+        SwitchFullScreenOrWindowed(true);
+      }
+      using (Settings xmlreader = new MPSettings())
+      {
+        xmlreader.Clear();
+      }
+      Process.Start(Config.GetFile(Config.Dir.Base, "configuration.exe"), @"/wizard /section=wizards\movies.xml");
+    }
+
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="sender"></param>
+    /// <param name="e"></param>
+    private void MenuItemDVD(object sender, EventArgs e)
+    {
+      g_Player.Stop();
+      if (GUIGraphicsContext.DX9Device.PresentationParameters.Windowed == false)
+      {
+        SwitchFullScreenOrWindowed(true);
+      }
+      using (Settings xmlreader = new MPSettings())
+      {
+        xmlreader.Clear();
+      }
+      Process.Start(Config.GetFile(Config.Dir.Base, "configuration.exe"), @"/wizard /section=wizards\dvd.xml");
+    }
+
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="sender"></param>
+    /// <param name="e"></param>
+    private void MenuItemFullscreen(object sender, EventArgs e)
+    {
+      ToggleFullWindowed();
+
+      var dialogNotify = (GUIDialogNotify)GUIWindowManager.GetWindow((int)GUIWindow.Window.WINDOW_DIALOG_NOTIFY);
+      if (dialogNotify != null)
+      {
+        dialogNotify.SetHeading(1020);
+        dialogNotify.SetText(String.Format("{0}\n{1}", GUILocalizeStrings.Get(1021), GUILocalizeStrings.Get(1022)));
+        dialogNotify.TimeOut = 6;
+        dialogNotify.SetImage(String.Format(@"{0}\media\{1}", GUIGraphicsContext.Skin, "dialog_information.png"));
+        dialogNotify.DoModal(GUIWindowManager.ActiveWindow);
+      }
+    }
+
+
+    /// <summary>
+    /// toggles default and minitv mode
+    /// </summary>
+    /// <param name="sender"></param>
+    /// <param name="e"></param>
+    private void MenuItemMiniTV(object sender, EventArgs e)
+    {
+      ToggleMiniTV();
+    }
+
+    #endregion
+
+    #region noitfy icon items
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="sender"></param>
+    /// <param name="e"></param>
+    protected virtual void NotifyIconRestore(Object sender, EventArgs e)
+    {
+      RestoreFromTray();
+    }
+
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="sender"></param>
+    /// <param name="e"></param>
+    private void NotifyIconExit(Object sender, EventArgs e)
+    {
+      ShuttingDown = true;
+      GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.STOPPING;
+    }
+    #endregion
+
+    #region event handlers
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="sender"></param>
+    /// <param name="e"></param>
+    private void OnLoad(object sender, EventArgs e)
+    {
+      Application.Idle += OnIdle;
 
       Initialize();
       OnStartup();
@@ -1740,7 +2171,7 @@ namespace MediaPortal
         handle.Close();
       }
       // suppress any errors
-      catch {}
+      catch { }
     }
 
 
@@ -1749,7 +2180,30 @@ namespace MediaPortal
     /// </summary>
     /// <param name="sender"></param>
     /// <param name="e"></param>
-    private static void D3DAppClosing(object sender, CancelEventArgs e)
+    private void OnIdle(object sender, EventArgs e)
+    {
+      do
+      {
+        OnProcess();
+        FrameMove();
+        StartFrameClock();
+        FullRender();
+        WaitForFrameClock();
+
+        if (GUIGraphicsContext.CurrentState == GUIGraphicsContext.State.STOPPING)
+        {
+          break;
+        }
+      } while (!Win32API.PeekMessage(ref _msgApi, IntPtr.Zero, 0, 0, 0));
+    }
+
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="sender"></param>
+    /// <param name="e"></param>
+    private static void OnClosing(object sender, CancelEventArgs e)
     {
       GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.STOPPING;
       g_Player.Stop();
@@ -1761,7 +2215,59 @@ namespace MediaPortal
     /// </summary>
     /// <param name="sender"></param>
     /// <param name="e"></param>
-    private void D3DAppClick(object sender, MouseEventArgs e)
+    private void OnKeyDown(object sender, KeyEventArgs e)
+    {
+      if (e.Control == false && e.Alt && (e.KeyCode == Keys.Return))
+      {
+        ToggleFullWindowed();
+        e.Handled = true;
+        return;
+      }
+      if (e.Control && e.Alt && e.KeyCode == Keys.Return)
+      {
+        ToggleMiniTV();
+        e.Handled = true;
+        return;
+      }
+      if (e.KeyCode == Keys.F2)
+      {
+        StartConfiguration();
+      }
+      if (e.Handled == false)
+      {
+        KeyDownEvent(e);
+      }
+    }
+
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="sender"></param>
+    /// <param name="e"></param>
+    private void OnKeyPress(object sender, KeyPressEventArgs e)
+    {
+      KeyPressEvent(e);
+    }
+
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="sender"></param>
+    /// <param name="e"></param>
+    private void OnMouseMove(object sender, MouseEventArgs e)
+    {
+      MouseMoveEvent(e);
+    }
+    
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="sender"></param>
+    /// <param name="e"></param>
+    private void OnClick(object sender, MouseEventArgs e)
     {
       if (ActiveForm != this)
       {
@@ -1776,290 +2282,94 @@ namespace MediaPortal
     /// </summary>
     /// <param name="sender"></param>
     /// <param name="e"></param>
-    private void D3DAppMouseMove(object sender, MouseEventArgs e)
+    private void OnMouseDoubleClick(object sender, MouseEventArgs e)
     {
-      MouseMoveEvent(e);
+      if (ActiveForm != this)
+      {
+        return;
+      }
+      MouseDoubleClickEvent(e);
     }
 
+    #endregion
 
+    #region virtual event handler helpers
     /// <summary>
     /// 
     /// </summary>
-    protected void ToggleFullWindowed()
-    {
-      _toggleFullWindowed = true;
-      Log.Info("D3D: Fullscreen / windowed mode toggled");
-      Maximized = !Maximized;
-      // Force player to stop so as not to crash during toggle
-      if (GUIGraphicsContext.Vmr9Active)
-      {
-        Log.Info("D3D: Vmr9Active - Stopping media");
-        g_Player.Stop();
-      }
-      GUITextureManager.CleanupThumbs();
-      GUITextureManager.Dispose();
-      GUIFontManager.Dispose();
-      if (Maximized)
-      {
-        Log.Info("D3D: Switching windowed mode -> fullscreen");
-        if (AutoHideTaskbar)
-        {
-          HideTaskBar();
-        }
-
-        FormBorderStyle = FormBorderStyle.None;
-        MaximizeBox = false;
-        MinimizeBox = false;
-        Menu = null;
-        _oldBounds = Bounds;
-        var newBounds = GUIGraphicsContext.currentScreen.Bounds;
-        Bounds = newBounds;
-        Update();
-        Log.Info("D3D: Switching windowed mode -> fullscreen done - Maximized: {0}", Maximized);
-        Log.Info("D3D: Client size: {0}x{1} - Screen: {2}x{3}",
-                 ClientSize.Width, ClientSize.Height,
-                 GUIGraphicsContext.currentScreen.Bounds.Width, GUIGraphicsContext.currentScreen.Bounds.Height);
-        SwitchFullScreenOrWindowed(false);
-      }
-      else
-      {
-        Log.Info("D3D: Switching fullscreen -> windowed mode");
-        if (AutoHideTaskbar)
-        {
-          HideTaskBar(false);
-        }
-        WindowState = FormWindowState.Normal;
-        FormBorderStyle = FormBorderStyle.Sizable;
-        MaximizeBox = true;
-        MinimizeBox = true;
-        Menu = _menuStripMain;
-        var newBounds = new Rectangle(_oldBounds.X, _oldBounds.Y, _oldBounds.Width, _oldBounds.Height);
-        using (Settings xmlreader = new MPSettings())
-        {
-          var autosize = xmlreader.GetValueAsBool("gui", "autosize", true);
-          if (autosize && !GUIGraphicsContext.Fullscreen)
-          {
-            newBounds.Height = GUIGraphicsContext.SkinSize.Height;
-            newBounds.Width = GUIGraphicsContext.SkinSize.Width;
-          }
-        }
-        Bounds = newBounds;
-        Update();
-        Log.Info("D3D: Switching fullscreen -> windowed mode done - Maximized: {0}", Maximized);
-        Log.Info("D3D: Client size: {0}x{1} - Screen: {2}x{3}",
-                 ClientSize.Width, ClientSize.Height,
-                 GUIGraphicsContext.currentScreen.Bounds.Width, GUIGraphicsContext.currentScreen.Bounds.Height);
-        SwitchFullScreenOrWindowed(true);
-      }
-      OnDeviceReset(null, null);
-      _toggleFullWindowed = false;
-    }
-
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="sender"></param>
     /// <param name="e"></param>
-    protected void OnKeyDown(object sender, KeyEventArgs e)
+    protected virtual void KeyDownEvent(KeyEventArgs e)
     {
-      if (e.Control == false && e.Alt && (e.KeyCode == Keys.Return))
-      {
-        ToggleFullWindowed();
-        e.Handled = true;
-        return;
-      }
-      if (e.Control && e.Alt && e.KeyCode == Keys.Return)
-      {
-        ToggleMiniTv();
-        e.Handled = true;
-        return;
-      }
-      if (e.KeyCode == Keys.F2)
-      {
-        OnSetup(null, null);
-      }
-      if (e.Handled == false)
-      {
-        KeyDownEvent(e);
-      }
     }
-
 
     /// <summary>
     /// 
     /// </summary>
-    private void InitializeComponent()
+    /// <param name="e"></param>
+    protected virtual void KeyPressEvent(KeyPressEventArgs e)
     {
-      _components = new Container();
-      var resources = new ComponentResourceManager(typeof (D3DApp));
-      _menuStripMain = new MainMenu(_components);
-      _menuItemFile = new MenuItem();
-      _menuItemExit = new MenuItem();
-      _menuItemOptions = new MenuItem();
-      _menuItemFullscreen = new MenuItem();
-      _menuItemMiniTv = new MenuItem();
-      _menuItemConfiguration = new MenuItem();
-      _menuItemWizards = new MenuItem();
-      _menuItemDvd = new MenuItem();
-      _menuItemMovies = new MenuItem();
-      _menuItemMusic = new MenuItem();
-      _menuItemPictures = new MenuItem();
-      _menuItemTelevision = new MenuItem();
-      _menuItemChangeDevice = new MenuItem();
-      _menuBreakFile = new MenuItem();
-      _notifyIcon = new NotifyIcon(_components);
-      _contextMenu = new ContextMenu();
-      _menuItemContext = new MenuItem();
-      _menuItem5 = new MenuItem();
-      SuspendLayout();
-      // 
-      // menuStripMain
-      // 
-      _menuStripMain.MenuItems.AddRange(new[]
-                                              {
-                                                _menuItemFile,
-                                                _menuItemOptions,
-                                                _menuItemWizards
-                                              });
-      // 
-      // menuItemFile
-      // 
-      _menuItemFile.Index = 0;
-      _menuItemFile.MenuItems.AddRange(new[]
-                                             {
-                                               _menuItemExit
-                                             });
-      _menuItemFile.Text = Resources.D3DApp_menuItem_File;
-      // 
-      // menuItemExit
-      // 
-      _menuItemExit.Index = 0;
-      _menuItemExit.Text = Resources.D3DApp_menuItem_Exit;
-      _menuItemExit.Click += ExitSample;
-      // 
-      // menuItemOptions
-      // 
-      _menuItemOptions.Index = 1;
-      _menuItemOptions.MenuItems.AddRange(new[]
-                                                {
-                                                  _menuItemFullscreen,
-                                                  _menuItemMiniTv,
-                                                  _menuItemConfiguration
-                                                });
-      _menuItemOptions.Text = Resources.D3DApp_menuItem_Options;
-      // 
-      // menuItemFullscreen
-      // 
-      _menuItemFullscreen.Index = 0;
-      _menuItemFullscreen.Text = Resources.D3DApp_menuItem_Fullscreen;
-      _menuItemFullscreen.Click += MenuItemFullscreenClick;
-      // 
-      // menuItemMiniTv
-      // 
-      _menuItemMiniTv.Index = 1;
-      _menuItemMiniTv.Text = Resources.D3DApp_menuItem_MiniTv;
-      _menuItemMiniTv.Click += MenuItemMiniTvClick;
-      // 
-      // menuItemConfiguration
-      // 
-      _menuItemConfiguration.Index = 2;
-      _menuItemConfiguration.Shortcut = Shortcut.F2;
-      _menuItemConfiguration.Text = Resources.D3DApp_menuItem_Configuration;
-      _menuItemConfiguration.Click += MenuItem2Click;
-      // 
-      // menuItemWizards
-      // 
-      _menuItemWizards.Index = 2;
-      _menuItemWizards.MenuItems.AddRange(new[]
-                                                {
-                                                  _menuItemDvd,
-                                                  _menuItemMovies,
-                                                  _menuItemMusic,
-                                                  _menuItemPictures,
-                                                  _menuItemTelevision
-                                                });
-      _menuItemWizards.Text = Resources.D3DApp_menuItem_Wizards;
-      // 
-      // menuItemDVD
-      // 
-      _menuItemDvd.Index = 0;
-      _menuItemDvd.Text = Resources.D3DApp_menuItem_DVD;
-      _menuItemDvd.Click += DvdMenuItemClick;
-      // 
-      // menuItemMovies
-      // 
-      _menuItemMovies.Index = 1;
-      _menuItemMovies.Text = Resources.D3DApp_menuItem_Movies;
-      _menuItemMovies.Click += MoviesMenuItemClick;
-      // 
-      // menuItemMusic
-      // 
-      _menuItemMusic.Index = 2;
-      _menuItemMusic.Text = Resources.D3DApp_menuItem_Music;
-      _menuItemMusic.Click += MusicMenuItemClick;
-      // 
-      // menuItemPictures
-      // 
-      _menuItemPictures.Index = 3;
-      _menuItemPictures.Text = Resources.D3DApp_menuItem_Pictures;
-      _menuItemPictures.Click += PicturesMenuItemClick;
-      // 
-      // menuItemTelevision
-      // 
-      _menuItemTelevision.Index = 4;
-      _menuItemTelevision.Text = Resources.D3DApp_menuItem_Television;
-      _menuItemTelevision.Click += TelevisionMenuItemClick;
-      // 
-      // menuItemChangeDevice
-      // 
-      _menuItemChangeDevice.Index = -1;
-      _menuItemChangeDevice.Text = "";
-      // 
-      // menuBreakFile
-      // 
-      _menuBreakFile.Index = -1;
-      _menuBreakFile.Text = Resources.D3DApp_MenuItem_Break;
-      // 
-      // notifyIcon
-      // 
-      _contextMenu.MenuItems.Clear();
-      _contextMenu.MenuItems.Add(Resources.D3DApp_NotifyIcon_Restore, RestoreOnClick);
-      _contextMenu.MenuItems.Add(Resources.D3DApp_NotifyIcon_Exit, ExitOnClick);
-      _notifyIcon.Text = Resources.D3DApp_NotifyIcon_MediaPortal;
-      _notifyIcon.Icon = ((Icon)(resources.GetObject("_notifyIcon.TrayIcon")));
-      _notifyIcon.ContextMenu = _contextMenu;
-      _notifyIcon.DoubleClick += RestoreOnClick;
-      // 
-      // menuItemContext
-      // 
-      _menuItemContext.Index = 0;
-      _menuItemContext.MenuItems.AddRange(new[]
-                                                {
-                                                  _menuItem5
-                                                });
-      _menuItemContext.Text = "";
-      // 
-      // menuItem5
-      // 
-      _menuItem5.Index = 0;
-      _menuItem5.Text = "";
-      // 
-      // D3DApp
-      // 
-      AutoScaleDimensions = new SizeF(6F, 13F);
-      ClientSize = new Size(720, 576);
-      KeyPreview = true;
-      MinimumSize = new Size(100, 100);
-      Name = "D3DApp";
-      Load += D3DAppLoad;
-      MouseDoubleClick += D3DAppMouseDoubleClick;
-      MouseDown += D3DAppClick;
-      Closing += D3DAppClosing;
-      KeyPress += OnKeyPress;
-      MouseMove += D3DAppMouseMove;
-      KeyDown += OnKeyDown;
-      ResumeLayout(false);
+    }
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="e"></param>
+    protected virtual void MouseMoveEvent(MouseEventArgs e)
+    {
+      if (!_disableMouseEvents && !ShowCursor)
+      {
+        Cursor.Show();
+        ShowCursor = true;
+        Invalidate(true);
+      }
+      MouseTimeOutTimer = DateTime.Now;
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="e"></param>
+    protected virtual void MouseClickEvent(MouseEventArgs e)
+    {
+      if (!ShowCursor)
+      {
+        Cursor.Show();
+        ShowCursor = true;
+        Invalidate(true);
+      }
+      MouseTimeOutTimer = DateTime.Now;
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="e"></param>
+    protected virtual void MouseDoubleClickEvent(MouseEventArgs e)
+    {
+      if (!ShowCursor)
+      {
+        Cursor.Show();
+        ShowCursor = true;
+        Invalidate(true);
+      }
+      MouseTimeOutTimer = DateTime.Now;
+    }
+
+    #endregion
+
+    #region forms overrides
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="e"></param>
+    protected override void OnKeyPress(KeyPressEventArgs e)
+    {
+      // Allow the control to handle the keystroke now
+      if (!e.Handled)
+      {
+        base.OnKeyPress(e);
+      }
     }
 
 
@@ -2092,6 +2402,38 @@ namespace MediaPortal
         OnDeviceReset(null, null);
       }
       base.OnSizeChanged(e);
+    }
+
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="e"></param>
+    protected override void OnGotFocus(EventArgs e)
+    {
+      _active = true;
+      base.OnGotFocus(e);
+    }
+
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="e"></param>
+    protected override void OnMove(EventArgs e)
+    {
+      if (GUIGraphicsContext.IsDirectX9ExUsed())
+      {
+        // Window maximize / restore button pressed 
+        if (WindowState != _windowState && WindowState != FormWindowState.Minimized)
+        {
+          _windowState = WindowState;
+          _ignoreNextResizeEvent = true;
+          SwitchFullScreenOrWindowed(false);
+          OnDeviceReset(null, null);
+        }
+      }
+      base.OnMove(e);
     }
 
 
@@ -2177,38 +2519,6 @@ namespace MediaPortal
     /// 
     /// </summary>
     /// <param name="e"></param>
-    protected override void OnGotFocus(EventArgs e)
-    {
-      _active = true;
-      base.OnGotFocus(e);
-    }
-
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="e"></param>
-    protected override void OnMove(EventArgs e)
-    {
-      if (GUIGraphicsContext.IsDirectX9ExUsed())
-      {
-        // Window maximize / restore button pressed 
-        if (WindowState != _windowState && WindowState != FormWindowState.Minimized)
-        {
-          _windowState = WindowState;
-          _ignoreNextResizeEvent = true;
-          SwitchFullScreenOrWindowed(false);
-          OnDeviceReset(null, null);
-        }
-      }
-      base.OnMove(e);
-    }
-
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="e"></param>
     protected override void OnClosing(CancelEventArgs e)
     {
       if (MinimizeOnGuiExit && !ShuttingDown)
@@ -2248,301 +2558,6 @@ namespace MediaPortal
     /// <summary>
     /// 
     /// </summary>
-    /// <param name="e"></param>
-    protected virtual void KeyPressEvent(KeyPressEventArgs e) {}
-
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="e"></param>
-    protected virtual void KeyDownEvent(KeyEventArgs e) {}
-
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="e"></param>
-    protected virtual void MouseMoveEvent(MouseEventArgs e)
-    {
-      if (!_disableMouseEvents && !ShowCursor)
-      {
-        Cursor.Show();
-        ShowCursor = true;
-        Invalidate(true);
-      }
-      MouseTimeOutTimer = DateTime.Now;
-    }
-
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="e"></param>
-    protected virtual void MouseClickEvent(MouseEventArgs e)
-    {
-      if (!ShowCursor)
-      {
-        Cursor.Show();
-        ShowCursor = true;
-        Invalidate(true);
-      }
-      MouseTimeOutTimer = DateTime.Now;
-    }
-
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="e"></param>
-    protected virtual void MouseDoubleClickEvent(MouseEventArgs e)
-    {
-      if (!ShowCursor)
-      {
-        Cursor.Show();
-        ShowCursor = true;
-        Invalidate(true);
-      }
-      MouseTimeOutTimer = DateTime.Now;
-    }
-
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="sender"></param>
-    /// <param name="e"></param>
-    private void OnKeyPress(object sender, KeyPressEventArgs e)
-    {
-      KeyPressEvent(e);
-    }
-
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="sender"></param>
-    /// <param name="e"></param>
-    private void TelevisionMenuItemClick(object sender, EventArgs e)
-    {
-      g_Player.Stop();
-
-      if (GUIGraphicsContext.DX9Device.PresentationParameters.Windowed == false)
-      {
-        SwitchFullScreenOrWindowed(true);
-      }
-      using (Settings xmlreader = new MPSettings())
-      {
-        xmlreader.Clear();
-      }
-      Process.Start(Config.GetFile(Config.Dir.Base, "configuration.exe"), @"/wizard /section=wizards\television.xml");
-    }
-
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="sender"></param>
-    /// <param name="e"></param>
-    private void PicturesMenuItemClick(object sender, EventArgs e)
-    {
-      g_Player.Stop();
-      if (GUIGraphicsContext.DX9Device.PresentationParameters.Windowed == false)
-      {
-        SwitchFullScreenOrWindowed(true);
-      }
-      using (Settings xmlreader = new MPSettings())
-      {
-        xmlreader.Clear();
-      }
-      Process.Start(Config.GetFile(Config.Dir.Base, "configuration.exe"), @"/wizard /section=wizards\pictures.xml");
-    }
-
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="sender"></param>
-    /// <param name="e"></param>
-    private void MusicMenuItemClick(object sender, EventArgs e)
-    {
-      g_Player.Stop();
-      if (GUIGraphicsContext.DX9Device.PresentationParameters.Windowed == false)
-      {
-        SwitchFullScreenOrWindowed(true);
-      }
-      using (Settings xmlreader = new MPSettings())
-      {
-        xmlreader.Clear();
-      }
-      Process.Start(Config.GetFile(Config.Dir.Base, "configuration.exe"), @"/wizard /section=wizards\music.xml");
-    }
-
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="sender"></param>
-    /// <param name="e"></param>
-    private void MoviesMenuItemClick(object sender, EventArgs e)
-    {
-      g_Player.Stop();
-      if (GUIGraphicsContext.DX9Device.PresentationParameters.Windowed == false)
-      {
-        SwitchFullScreenOrWindowed(true);
-      }
-      using (Settings xmlreader = new MPSettings())
-      {
-        xmlreader.Clear();
-      }
-      Process.Start(Config.GetFile(Config.Dir.Base, "configuration.exe"), @"/wizard /section=wizards\movies.xml");
-    }
-
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="sender"></param>
-    /// <param name="e"></param>
-    private void DvdMenuItemClick(object sender, EventArgs e)
-    {
-      g_Player.Stop();
-      if (GUIGraphicsContext.DX9Device.PresentationParameters.Windowed == false)
-      {
-        SwitchFullScreenOrWindowed(true);
-      }
-      using (Settings xmlreader = new MPSettings())
-      {
-        xmlreader.Clear();
-      }
-      Process.Start(Config.GetFile(Config.Dir.Base, "configuration.exe"), @"/wizard /section=wizards\dvd.xml");
-    }
-
-
-    /// <summary>
-    /// 
-    /// </summary>
-    private static void StartFrameClock()
-    {
-      _clockWatch.Reset();
-      _clockWatch.Start();
-    }
-
-
-    /// <summary>
-    /// 
-    /// </summary>
-    private static void WaitForFrameClock()
-    {
-      // frame limiting code.
-      // sleep as long as there are ticks left for this frame
-      _clockWatch.Stop();
-      var timeElapsed = _clockWatch.ElapsedTicks;
-      if (timeElapsed < GUIGraphicsContext.DesiredFrameTime)
-      {
-        var milliSecondsLeft = (((GUIGraphicsContext.DesiredFrameTime - timeElapsed) * 1000) / Stopwatch.Frequency);
-        milliSecondsLeft = milliSecondsLeft == 0 ? 1 : milliSecondsLeft;
-        Thread.Sleep((int)milliSecondsLeft);
-      }
-    }
-
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="sender"></param>
-    /// <param name="e"></param>
-    protected virtual void RestoreOnClick(Object sender, EventArgs e)
-    {
-      RestoreFromTray();
-    }
-
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="sender"></param>
-    /// <param name="e"></param>
-    private void ExitOnClick(Object sender, EventArgs e)
-    {
-      ShuttingDown = true;
-      GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.STOPPING;
-    }
-
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="sender"></param>
-    /// <param name="e"></param>
-    private void MenuItemFullscreenClick(object sender, EventArgs e)
-    {
-      ToggleFullWindowed();
-
-      var dialogNotify = (GUIDialogNotify)GUIWindowManager.GetWindow((int)GUIWindow.Window.WINDOW_DIALOG_NOTIFY);
-      if (dialogNotify != null)
-      {
-        dialogNotify.SetHeading(1020);
-        dialogNotify.SetText(String.Format("{0}\n{1}", GUILocalizeStrings.Get(1021), GUILocalizeStrings.Get(1022)));
-        dialogNotify.TimeOut = 6;
-        dialogNotify.SetImage(String.Format(@"{0}\media\{1}", GUIGraphicsContext.Skin, "dialog_information.png"));
-        dialogNotify.DoModal(GUIWindowManager.ActiveWindow);
-      }
-    }
-
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <returns></returns>
-    private bool AppStillIdle()
-    {
-      var result = Win32API.PeekMessage(ref _msgApi, IntPtr.Zero, 0, 0, 0);
-      return !result;
-    }
-
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="sender"></param>
-    /// <param name="e"></param>
-    private void ApplicationIdle(object sender, EventArgs e)
-    {
-      do
-      {
-        OnProcess();
-        FrameMove();
-        StartFrameClock();
-        FullRender();
-        WaitForFrameClock();
-
-        if (GUIGraphicsContext.CurrentState == GUIGraphicsContext.State.STOPPING)
-        {
-          break;
-        }
-      } while (AppStillIdle());
-    }
-
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="sender"></param>
-    /// <param name="e"></param>
-    private void D3DAppMouseDoubleClick(object sender, MouseEventArgs e)
-    {
-      if (ActiveForm != this)
-      {
-        return;
-      }
-      MouseDoubleClickEvent(e);
-    }
-
-
-    /// <summary>
-    /// 
-    /// </summary>
     /// <param name="x"></param>
     /// <param name="y"></param>
     /// <param name="width"></param>
@@ -2561,51 +2576,48 @@ namespace MediaPortal
       }
     }
 
-
-    /// <summary>
-    /// toggles default and minitv mode
-    /// </summary>
-    /// <param name="sender"></param>
-    /// <param name="e"></param>
-    private void MenuItemMiniTvClick(object sender, EventArgs e)
-    {
-      ToggleMiniTv();
-    }
-
-
     /// <summary>
     /// 
     /// </summary>
-    private void ToggleMiniTv()
+    public override sealed string Text
     {
-      if (!Windowed) return; // only affection window mode
-
-      _miniTvMode = !_miniTvMode; // toggle
-
-      if (_miniTvMode)
+      get
       {
-        MinimumSize = new Size(720 / 2, 576 / 2);
-        _alwaysOnTop = true;
-        FormBorderStyle = FormBorderStyle.SizableToolWindow;
-        Menu = null;
+        return base.Text;
       }
-      else
+      set
       {
-        MinimumSize = new Size(720, 576);
-        _alwaysOnTop = _alwaysOnTopConfig;
-        FormBorderStyle = FormBorderStyle.Sizable;
-        Menu = _menuStripMain;
-
-        SwitchFullScreenOrWindowed(true);
+        base.Text = value;
       }
-
-      Size = MinimumSize;
-      TopMost = _alwaysOnTop;
-
-      _menuItemMiniTv.Checked = _miniTvMode;
     }
+
+    /// <summary>
+    /// Clean up any resources
+    /// </summary>
+    protected override void Dispose(bool disposing)
+    {
+      CleanupEnvironment();
+
+      if (_notifyIcon != null)
+      {
+        //we dispose our tray icon here
+        _notifyIcon.Dispose();
+      }
+
+      base.Dispose(disposing);
+
+      if (AutoHideTaskbar)
+      {
+        HideTaskBar(false);
+      }
+    }
+
+    #endregion
+  
   }
 
+  #endregion
+  
   #region Enums for D3D Applications
 
   /// <summary>
@@ -2708,7 +2720,7 @@ namespace MediaPortal
 
   #endregion
 
-  #region Native Methods
+  #region NativeMethods
 
   /// <summary>
   /// Holds native methods

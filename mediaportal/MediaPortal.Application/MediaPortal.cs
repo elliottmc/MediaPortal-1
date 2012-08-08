@@ -3236,7 +3236,7 @@ public class MediaPortalApp : D3DApp, IRender
     }
   }
 
-  protected override void RestoreOnClick(Object sender, EventArgs e)
+  protected override void NotifyIconRestore(Object sender, EventArgs e)
   {
     if (Volume > 0 && (g_Player.IsVideo || g_Player.IsTV))
     {
