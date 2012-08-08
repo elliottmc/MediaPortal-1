@@ -18,8 +18,6 @@
 
 #endregion
 
-#region usings
-
 using System;
 using System.Collections;
 using System.Drawing;
@@ -33,14 +31,11 @@ using MediaPortal.ExtensionMethods;
 using MediaPortal.GUI.Library;
 using MediaPortal.Playlists;
 using MediaPortal.Profile;
-using MediaPortal.Ripper;
 using MediaPortal.Subtitle;
 using MediaPortal.Util;
 using MediaPortal.Visualization;
 using Un4seen.Bass.AddOn.Cd;
 using Action = MediaPortal.GUI.Library.Action;
-
-#endregion
 
 namespace MediaPortal.Player
 {
@@ -49,18 +44,6 @@ namespace MediaPortal.Player
   // ReSharper restore InconsistentNaming
   {
     #region enums
-
-    #region DriveType enum
-
-    public enum DriveType
-    {
-      CD,
-      DVD
-    };
-
-    #endregion
-
-    #region MediaType enum
 
     public enum MediaType
     {
@@ -71,9 +54,13 @@ namespace MediaPortal.Player
       Music,
       Recording,
       Unknown
-    };
+    } ;
 
-    #endregion
+    public enum DriveType
+    {
+      CD,
+      DVD
+    } ;
 
     #endregion
 
@@ -83,6 +70,7 @@ namespace MediaPortal.Player
     private static int _currentStep;
     private static int _currentStepIndex = -1;
     private static DateTime _seekTimer = DateTime.MinValue;
+    private static IPlayer _player;
     private static IPlayer _prevPlayer;
     private static SubTitles _subs;
     private static bool _isInitialized;
@@ -107,7 +95,7 @@ namespace MediaPortal.Player
     private static string _currentDescription = "";
     //actual program metadata - useful for TV - avoids extra DB Lookups. 
 
-    private static string _currentFileName = ""; // holds the actual file being played. Useful for rtsp streams. 
+    private static string _currentFileName = ""; //holds the actual file being played. Useful for rtsp streams. 
     private static double[] _chapters;
     private static string[] _chaptersname;
     private static double[] _jumpPoints;
@@ -120,21 +108,17 @@ namespace MediaPortal.Player
 
     #region events
 
-    #region Delegates
-
-    public delegate void AudioTracksReadyHandler();
-
-    public delegate void ChangedHandler(MediaType type, int stoptime, string filename);
+    public delegate void StoppedHandler(MediaType type, int stoptime, string filename);
 
     public delegate void EndedHandler(MediaType type, string filename);
 
     public delegate void StartedHandler(MediaType type, string filename);
 
-    public delegate void StoppedHandler(MediaType type, int stoptime, string filename);
+    public delegate void ChangedHandler(MediaType type, int stoptime, string filename);
+
+    public delegate void AudioTracksReadyHandler();
 
     public delegate void TVChannelChangeHandler();
-
-    #endregion
 
     // when a user is already playing a file without stopping the user selects another file for playback.
     // in this case we do not receive the onstopped event.
@@ -149,20 +133,27 @@ namespace MediaPortal.Player
 
     #endregion
 
+    #region Delegates
+
+    #endregion
+
     #region ctor/dtor
 
     // singleton. Don't allow any instance of this class
-
-    static g_Player()
-    {
-    }
-
     private g_Player()
     {
       _factory = new PlayerFactory();
     }
 
-    public static IPlayer Player { get; private set; }
+    static g_Player() { }
+
+    public static IPlayer Player
+    {
+      get
+      {
+        return _player;
+      }
+    }
 
     public static IPlayerFactory Factory
     {
@@ -217,7 +208,7 @@ namespace MediaPortal.Player
     #region Serialisation
 
     /// <summary>
-    ///   Retrieve the CD/DVD Speed set in the config file
+    /// Retrieve the CD/DVD Speed set in the config file
     /// </summary>
     public static void LoadDriveSpeed()
     {
@@ -268,7 +259,7 @@ namespace MediaPortal.Player
             builderDisable.Append(", ");
           }
           BassCd.BASS_CD_GetInfo(i, cdinfo);
-          var maxspeed = (int) (cdinfo.maxspeed/176.4);
+          var maxspeed = (int)(cdinfo.maxspeed / 176.4);
           builder.Append(Convert.ToInt32(maxspeed).ToString(CultureInfo.InvariantCulture));
           builderDisable.Append("N");
         }
@@ -286,7 +277,7 @@ namespace MediaPortal.Player
     }
 
     /// <summary>
-    ///   Read the configuration file to get the skip steps
+    /// Read the configuration file to get the skip steps
     /// </summary>
     public static ArrayList LoadSettings()
     {
@@ -294,7 +285,7 @@ namespace MediaPortal.Player
       using (Settings xmlreader = new MPSettings())
       {
         var strFromXml = xmlreader.GetValueAsString("movieplayer", "skipsteps", "15,30,60,180,300,600,900,1800,3600,7200");
-        if (String.IsNullOrEmpty(strFromXml)) // config after wizard run 1st
+        if (strFromXml == string.Empty) // config after wizard run 1st
         {
           strFromXml = "15,30,60,180,300,600,900,1800,3600,7200";
           Log.Info("g_player - creating new Skip-Settings {0}", "");
@@ -303,13 +294,13 @@ namespace MediaPortal.Player
         {
           strFromXml = ConvertToNewStyle(strFromXml);
         }
-        foreach (var token in strFromXml.Split(new[] {',', ';', ' '}).Where(token => token != string.Empty))
+        foreach (var token in strFromXml.Split(new[] { ',', ';', ' ' }).Where(token => token != string.Empty))
         {
           stepArray.Add(Convert.ToInt32(token));
         }
         _seekStepList = stepArray;
         var timeout = (xmlreader.GetValueAsString("movieplayer", "skipsteptimeout", "1500"));
-        _seekStepTimeout = String.IsNullOrEmpty(timeout) ? 1500 : Convert.ToInt16(timeout);
+        _seekStepTimeout = timeout == string.Empty ? 1500 : Convert.ToInt16(timeout);
       }
       ConfigLoaded = true;
       return stepArray; // Sorted list of step times
@@ -319,7 +310,7 @@ namespace MediaPortal.Player
     {
       var count = 0;
       var foundOtherThanZeroOrOne = false;
-      foreach (var curInt in from token in strSteps.Split(new[] {',', ';', ' '}) where token != string.Empty select Convert.ToInt16(token))
+      foreach (var curInt in from token in strSteps.Split(new[] { ',', ';', ' ' }) where token != string.Empty select Convert.ToInt16(token))
       {
         if (curInt != 0 && curInt != 1)
         {
@@ -334,7 +325,7 @@ namespace MediaPortal.Player
     {
       var count = 0;
       var newStyle = string.Empty;
-      foreach (var token in strSteps.Split(new[] {',', ';', ' '}))
+      foreach (var token in strSteps.Split(new[] { ',', ';', ' ' }))
       {
         if (token == string.Empty)
         {
@@ -402,9 +393,9 @@ namespace MediaPortal.Player
     }
 
     /// <summary>
-    ///   Changes the speed of a drive to the value set in configuration
+    /// Changes the speed of a drive to the value set in configuration
     /// </summary>
-    /// <param name="strFile"> </param>
+    /// <param name="strFile"></param>
     /// <param name="drivetype"> </param>
     private static void ChangeDriveSpeed(string strFile, DriveType drivetype)
     {
@@ -447,9 +438,7 @@ namespace MediaPortal.Player
           }
         }
       }
-      catch (Exception)
-      {
-      }
+      catch (Exception) { }
     }
 
     #endregion
@@ -457,532 +446,6 @@ namespace MediaPortal.Player
     #region public members
 
     //called when TV channel is changed
-
-    public static bool IsCDA
-    {
-      get
-      {
-        return Player != null && Player.IsCDA;
-      }
-    }
-
-    public static bool IsDVD
-    {
-      get
-      {
-        return Player != null && Player.IsDVD;
-      }
-    }
-
-    public static bool IsDVDMenu
-    {
-      get
-      {
-        return Player != null && Player.IsDVDMenu;
-      }
-    }
-
-    public static MenuItems ShowMenuItems
-    {
-      get
-      {
-        return Player == null ? MenuItems.All : Player.ShowMenuItems;
-      }
-    }
-
-    public static bool HasChapters
-    {
-      get {
-        return Player != null && Chapters != null;
-      }
-    }
-
-    public static bool IsTV
-    {
-      get
-      {
-        if (RefreshRateChanger.RefreshRateChangePending && RefreshRateChanger.RefreshRateChangeMediaType == RefreshRateChanger.MediaType.TV)
-        {
-          return true;
-        }
-        return Player != null && Player.IsTV;
-      }
-    }
-
-    public static bool IsTVRecording
-    {
-      get
-      {
-        if (RefreshRateChanger.RefreshRateChangePending && RefreshRateChanger.RefreshRateChangeMediaType == RefreshRateChanger.MediaType.Recording)
-        {
-          return true;
-        }
-        if (Player == null)
-        {
-          return false;
-        }
-        return (_currentMedia == MediaType.Recording);
-      }
-    }
-
-    public static bool IsTimeShifting
-    {
-      get
-      {
-        return Player != null && Player.IsTimeShifting;
-      }
-    }
-
-    public static bool IsExternalPlayer
-    {
-      get
-      {
-        return Player != null && Player.IsExternal;
-      }
-    }
-
-    public static bool IsRadio
-    {
-      get
-      {
-        return Player != null && (Player.IsRadio);
-      }
-    }
-
-    public static bool IsMusic
-    {
-      get
-      {
-        if (Player == null)
-        {
-          return false;
-        }
-        return (_currentMedia == MediaType.Music);
-      }
-    }
-
-    public static bool Playing
-    {
-      get
-      {
-        if (Player == null)
-        {
-          return false;
-        }
-        if (_isInitialized)
-        {
-          return false;
-        }
-        var bResult = Player.Playing;
-        return bResult;
-      }
-    }
-
-    public static int PlaybackType
-    {
-      get
-      {
-        if (Player == null)
-        {
-          return -1;
-        }
-        return Player.PlaybackType;
-      }
-    }
-
-    public static bool Paused
-    {
-      get
-      {
-        return Player != null && Player.Paused;
-      }
-    }
-
-    public static bool Stopped
-    {
-      get
-      {
-        if (_isInitialized)
-        {
-          return false;
-        }
-        return Player != null && Player.Stopped;
-      }
-    }
-
-    public static int Speed
-    {
-      get
-      {
-        return Player == null ? 1 : Player.Speed;
-      }
-      set
-      {
-        if (Player == null)
-        {
-          return;
-        }
-        Player.Speed = value;
-        _currentStep = 0;
-        _currentStepIndex = -1;
-        _seekTimer = DateTime.MinValue;
-      }
-    }
-
-    public static string CurrentFile
-    {
-      get
-      {
-        return Player == null ? "" : Player.CurrentFile;
-      }
-    }
-
-    public static int Volume
-    {
-      get
-      {
-        if (Player == null)
-        {
-          return -1;
-        }
-        return Player.Volume;
-      }
-      set
-      {
-        if (Player != null)
-        {
-          Player.Volume = value;
-        }
-      }
-    }
-
-    public static Geometry.Type ARType
-    {
-      get
-      {
-        return GUIGraphicsContext.ARType;
-      }
-      set
-      {
-        if (Player != null)
-        {
-          Player.ARType = value;
-        }
-      }
-    }
-
-    public static int PositionX
-    {
-      get
-      {
-        return Player == null ? 0 : Player.PositionX;
-      }
-      set
-      {
-        if (Player != null)
-        {
-          Player.PositionX = value;
-        }
-      }
-    }
-
-    public static int PositionY
-    {
-      get
-      {
-        return Player == null ? 0 : Player.PositionY;
-      }
-      set
-      {
-        if (Player != null)
-        {
-          Player.PositionY = value;
-        }
-      }
-    }
-
-    public static int RenderWidth
-    {
-      get
-      {
-        return Player == null ? 0 : Player.RenderWidth;
-      }
-      set
-      {
-        if (Player != null)
-        {
-          Player.RenderWidth = value;
-        }
-      }
-    }
-
-    public static bool Visible
-    {
-      get
-      {
-        return Player != null && Player.Visible;
-      }
-      set
-      {
-        if (Player != null)
-        {
-          Player.Visible = value;
-        }
-      }
-    }
-
-    public static int RenderHeight
-    {
-      get
-      {
-        return Player == null ? 0 : Player.RenderHeight;
-      }
-      set
-      {
-        if (Player != null)
-        {
-          Player.RenderHeight = value;
-        }
-      }
-    }
-
-    public static double Duration
-    {
-      get
-      {
-        return Player == null ? 0 : Player.Duration;
-      }
-    }
-
-    public static double CurrentPosition
-    {
-      get
-      {
-        return Player == null ? 0 : Player.CurrentPosition;
-      }
-    }
-
-    public static double StreamPosition
-    {
-      get
-      {
-        return Player == null ? 0 : Player.StreamPosition;
-      }
-    }
-
-    public static double ContentStart
-    {
-      get
-      {
-        return Player == null ? 0 : Player.ContentStart;
-      }
-    }
-
-    public static bool FullScreen
-    {
-      get
-      {
-        return Player == null ? GUIGraphicsContext.IsFullScreenVideo : Player.FullScreen;
-      }
-      set
-      {
-        if (Player != null)
-        {
-          Player.FullScreen = value;
-        }
-      }
-    }
-
-    public static double[] Chapters
-    {
-      get
-      {
-        if (Player != null)
-        {
-          return _chapters ?? Player.Chapters;
-        }
-        return null;
-      }
-    }
-
-    public static string[] ChaptersName
-    {
-      get
-      {
-        if (Player == null)
-        {
-          return null;
-        }
-        _chaptersname = Player.ChaptersName;
-        return _chaptersname;
-      }
-    }
-
-    public static double[] JumpPoints
-    {
-      get
-      {
-        return _jumpPoints;
-      }
-    }
-
-    public static int Width
-    {
-      get
-      {
-        return Player == null ? 0 : Player.Width;
-      }
-    }
-
-    public static int Height
-    {
-      get
-      {
-        return Player == null ? 0 : Player.Height;
-      }
-    }
-
-    public static bool HasVideo
-    {
-      get
-      {
-        if (RefreshRateChanger.RefreshRateChangePending)
-        {
-          return true;
-        }
-        return Player != null && Player.HasVideo;
-      }
-    }
-
-    public static bool HasViz
-    {
-      get
-      {
-        if (RefreshRateChanger.RefreshRateChangePending)
-        {
-          return true;
-        }
-        return Player != null && Player.HasViz;
-      }
-    }
-
-    public static bool IsVideo
-    {
-      get
-      {
-        if (RefreshRateChanger.RefreshRateChangePending &&
-            RefreshRateChanger.RefreshRateChangeMediaType == RefreshRateChanger.MediaType.Video)
-        {
-          return true;
-        }
-        if (Player == null)
-        {
-          return false;
-        }
-        return _currentMedia == MediaType.Video;
-      }
-    }
-
-    public static bool HasSubs
-    {
-      get
-      {
-        if (Player == null)
-        {
-          return false;
-        }
-        return (_subs != null);
-      }
-    }
-
-    public static bool EnableSubtitle
-    {
-      get
-      {
-        return Player != null && Player.EnableSubtitle;
-      }
-      set
-      {
-        if (Player == null)
-        {
-          return;
-        }
-        Player.EnableSubtitle = value;
-      }
-    }
-
-    public static bool EnableForcedSubtitle
-    {
-      get
-      {
-        return Player != null && Player.EnableForcedSubtitle;
-      }
-      set
-      {
-        if (Player == null)
-        {
-          return;
-        }
-        Player.EnableForcedSubtitle = value;
-      }
-    }
-
-    public static bool SupportsCC
-    {
-      get
-      {
-        if (IsDVD || IsTV || IsVideo)
-        {
-          var dvdPlayer = Player as DVDPlayer;
-          var tsReaderPlayer = Player as TSReaderPlayer;
-          return dvdPlayer != null ? dvdPlayer.SupportsCC : tsReaderPlayer != null && tsReaderPlayer.SupportsCC;
-        }
-        return false;
-      }
-    }
-
-    /// <summary>
-    ///   returns video window rectangle
-    /// </summary>
-    public static Rectangle VideoWindow
-    {
-      get
-      {
-        return Player == null ? new Rectangle(0, 0, 0, 0) : Player.VideoWindow;
-      }
-    }
-
-    /// <summary>
-    ///   returns video source rectangle displayed
-    /// </summary>
-    public static Rectangle SourceWindow
-    {
-      get
-      {
-        return Player == null ? new Rectangle(0, 0, 0, 0) : Player.SourceWindow;
-      }
-    }
-
-    public static bool CanSeek
-    {
-      get
-      {
-        if (Player == null)
-        {
-          return false;
-        }
-        return (Player.CanSeek() && !Player.IsDVDMenu);
-      }
-    }
-
-    public static MediaInfoWrapper MediaInfo
-    {
-      get
-      {
-        return _mediaInfo;
-      }
-    }
-
     private static void OnTVChannelChanged()
     {
       if (TVChannelChanged != null)
@@ -1017,11 +480,12 @@ namespace MediaPortal.Player
         Log.Info("g_Player.OnChanged()");
         if (PlayBackChanged != null)
         {
-          if ((_currentMedia == MediaType.TV || _currentMedia == MediaType.Video || _currentMedia == MediaType.Recording) && (!Util.Utils.IsVideo(newFile)))
+          if ((_currentMedia == MediaType.TV || _currentMedia == MediaType.Video || _currentMedia == MediaType.Recording) &&
+              (!Util.Utils.IsVideo(newFile)))
           {
             RefreshRateChanger.AdaptRefreshRate();
           }
-          PlayBackChanged(_currentMedia, (int) CurrentPosition, (!String.IsNullOrEmpty(CurrentFileName) ? CurrentFileName : CurrentFile));
+          PlayBackChanged(_currentMedia, (int)CurrentPosition, (!String.IsNullOrEmpty(CurrentFileName) ? CurrentFileName : CurrentFile));
           CurrentFileName = String.Empty;
         }
       }
@@ -1037,8 +501,7 @@ namespace MediaPortal.Player
         Log.Info("g_Player.OnStopped()");
         if (PlayBackStopped != null)
         {
-          PlayBackStopped(_currentMedia, (int) CurrentPosition,
-                          (!String.IsNullOrEmpty(CurrentFileName) ? CurrentFileName : CurrentFile));
+          PlayBackStopped(_currentMedia, (int)CurrentPosition, (!String.IsNullOrEmpty(CurrentFileName) ? CurrentFileName : CurrentFile));
           CurrentFileName = String.Empty;
           _mediaInfo = null;
         }
@@ -1064,29 +527,29 @@ namespace MediaPortal.Player
     private static void OnStarted()
     {
       // check if we're playing
-      if (Player == null)
+      if (_player == null)
       {
         return;
       }
-      if (Player.Playing)
+      if (_player.Playing)
       {
         // yes, then raise event 
         _currentMedia = MediaType.Music;
-        if (Player.IsTV)
+        if (_player.IsTV)
         {
           _currentMedia = MediaType.TV;
-          if (!Player.IsTimeShifting)
+          if (!_player.IsTimeShifting)
           {
             _currentMedia = MediaType.Recording;
           }
         }
-        else if (Player.IsRadio)
+        else if (_player.IsRadio)
         {
           _currentMedia = MediaType.Radio;
         }
-        else if (Player.HasVideo)
+        else if (_player.HasVideo)
         {
-          if (Player.ToString() != "MediaPortal.Player.BassAudioEngine")
+          if (_player.ToString() != "MediaPortal.Player.BassAudioEngine")
           {
             _currentMedia = MediaType.Video;
           }
@@ -1101,17 +564,17 @@ namespace MediaPortal.Player
 
     public static void PauseGraph()
     {
-      if (Player != null)
+      if (_player != null)
       {
-        Player.PauseGraph();
+        _player.PauseGraph();
       }
     }
 
     public static void ContinueGraph()
     {
-      if (Player != null)
+      if (_player != null)
       {
-        Player.ContinueGraph();
+        _player.ContinueGraph();
       }
     }
 
@@ -1125,21 +588,20 @@ namespace MediaPortal.Player
         for (var i = 0; i < _driveCount; i++)
         {
           BassCd.BASS_CD_GetInfo(i, cdinfo);
-          var maxspeed = (int) (cdinfo.maxspeed/176.4);
+          var maxspeed = (int)(cdinfo.maxspeed / 176.4);
           BassCd.BASS_CD_SetSpeed(i, maxspeed);
           BassCd.BASS_CD_Release(i);
         }
       }
-      if (Player != null)
+      if (_player != null)
       {
-        Log.Debug("g_Player.doStop() keepTimeShifting = {0} keepExclusiveModeOn = {1}", keepTimeShifting,
-                  keepExclusiveModeOn);
+        Log.Debug("g_Player.doStop() keepTimeShifting = {0} keepExclusiveModeOn = {1}", keepTimeShifting, keepExclusiveModeOn);
         // Get playing file for unmount handling
         var currentFile = CurrentFile;
         OnStopped();
 
         // since plugins could stop playback, we need to make sure that _player is not null.
-        if (Player == null)
+        if (_player == null)
         {
           return;
         }
@@ -1148,17 +610,17 @@ namespace MediaPortal.Player
         if (!keepTimeShifting && !keepExclusiveModeOn)
         {
           Log.Debug("g_Player.doStop() - stop");
-          Player.Stop();
+          _player.Stop();
         }
         else if (keepExclusiveModeOn)
         {
           Log.Debug("g_Player.doStop() - stop, keep exclusive mode on");
-          Player.Stop(true);
+          _player.Stop(true);
         }
         else
         {
           Log.Debug("g_Player.doStop() - StopAndKeepTimeShifting");
-          Player.StopAndKeepTimeShifting();
+          _player.StopAndKeepTimeShifting();
         }
         if (GUIGraphicsContext.form != null)
         {
@@ -1224,47 +686,47 @@ namespace MediaPortal.Player
     public static void Stop()
     {
       // we have to save the fullscreen status of the tv3 plugin for later use for the lastactivemodulefullscreen feature.
-      var currentmodulefullscreen = (GUIWindowManager.ActiveWindow == (int) GUIWindow.Window.WINDOW_TVFULLSCREEN ||
-                                     GUIWindowManager.ActiveWindow == (int) GUIWindow.Window.WINDOW_FULLSCREEN_MUSIC ||
-                                     GUIWindowManager.ActiveWindow == (int) GUIWindow.Window.WINDOW_FULLSCREEN_VIDEO ||
-                                     GUIWindowManager.ActiveWindow == (int) GUIWindow.Window.WINDOW_FULLSCREEN_TELETEXT);
+      var currentmodulefullscreen = (GUIWindowManager.ActiveWindow == (int)GUIWindow.Window.WINDOW_TVFULLSCREEN ||
+                                     GUIWindowManager.ActiveWindow == (int)GUIWindow.Window.WINDOW_FULLSCREEN_MUSIC ||
+                                     GUIWindowManager.ActiveWindow == (int)GUIWindow.Window.WINDOW_FULLSCREEN_VIDEO ||
+                                     GUIWindowManager.ActiveWindow == (int)GUIWindow.Window.WINDOW_FULLSCREEN_TELETEXT);
       GUIPropertyManager.SetProperty("#currentmodulefullscreenstate", Convert.ToString(currentmodulefullscreen));
       DoStop(false, false);
     }
 
     private static void CachePlayer()
     {
-      if (Player == null)
+      if (_player == null)
       {
         return;
       }
-      if (Player.SupportsReplay)
+      if (_player.SupportsReplay)
       {
-        _prevPlayer = Player;
-        Player = null;
+        _prevPlayer = _player;
+        _player = null;
       }
       else
       {
-        Player.SafeDispose();
-        Player = null;
+        _player.SafeDispose();
+        _player = null;
         _prevPlayer = null;
       }
     }
 
     public static void Pause()
     {
-      if (Player != null)
+      if (_player != null)
       {
         _currentStep = 0;
         _currentStepIndex = -1;
         _seekTimer = DateTime.MinValue;
-        Player.Speed = 1; //default back to 1x speed.
+        _player.Speed = 1; //default back to 1x speed.
 
 
-        Player.Pause();
+        _player.Pause();
         if (VMR9Util.g_vmr9 != null)
         {
-          if (Player.Paused)
+          if (_player.Paused)
           {
             VMR9Util.g_vmr9.SetRepaint();
           }
@@ -1274,9 +736,9 @@ namespace MediaPortal.Player
 
     public static bool OnAction(Action action)
     {
-      if (Player != null)
+      if (_player != null)
       {
-        if (!Player.IsDVD && Chapters != null)
+        if (!_player.IsDVD && Chapters != null)
         {
           switch (action.wID)
           {
@@ -1288,16 +750,96 @@ namespace MediaPortal.Player
               return true;
           }
         }
-        return Player.OnAction(action);
+        return _player.OnAction(action);
       }
       return false;
     }
 
+    public static bool IsCDA
+    {
+      get
+      {
+        return _player != null && _player.IsCDA;
+      }
+    }
+
+    public static bool IsDVD
+    {
+      get
+      {
+        return _player != null && _player.IsDVD;
+      }
+    }
+
+    public static bool IsDVDMenu
+    {
+      get
+      {
+        return _player != null && _player.IsDVDMenu;
+      }
+    }
+
+    public static MenuItems ShowMenuItems
+    {
+      get
+      {
+        return _player == null ? MenuItems.All : _player.ShowMenuItems;
+      }
+    }
+
+    public static bool HasChapters
+    {
+      get
+      {
+        if (_player == null)
+        {
+          return false;
+        }
+        return Chapters != null;
+      }
+    }
+
+    public static bool IsTV
+    {
+      get
+      {
+        if (RefreshRateChanger.RefreshRateChangePending && RefreshRateChanger.RefreshRateChangeMediaType == RefreshRateChanger.MediaType.TV)
+        {
+          return true;
+        }
+        return _player != null && _player.IsTV;
+      }
+    }
+
+    public static bool IsTVRecording
+    {
+      get
+      {
+        if (RefreshRateChanger.RefreshRateChangePending && RefreshRateChanger.RefreshRateChangeMediaType == RefreshRateChanger.MediaType.Recording)
+        {
+          return true;
+        }
+        if (_player == null)
+        {
+          return false;
+        }
+        return (_currentMedia == MediaType.Recording);
+      }
+    }
+
+    public static bool IsTimeShifting
+    {
+      get
+      {
+        return _player != null && _player.IsTimeShifting;
+      }
+    }
+
     public static void Release()
     {
-      if (Player != null)
+      if (_player != null)
       {
-        Player.Stop();
+        _player.Stop();
         CachePlayer();
       }
     }
@@ -1422,7 +964,7 @@ namespace MediaPortal.Player
       return PlayAudioStream(strURL, false);
     }
 
-    // GUIMusicVideos and GUITRailer called this function, altough they want to play a Video.
+    // GUIMusicVideos and GUITRailer called this function, although they want to play a Video.
     // When BASS is enabled this resulted in no Picture being shown. they should now indicate that a Video is to be played.
     public static bool PlayAudioStream(string strURL, bool isMusicVideo)
     {
@@ -1448,27 +990,25 @@ namespace MediaPortal.Player
             PlayListPlayer.SingletonPlayer.Reset();
           }
         }
-        //stop timeshifting tv
-        //GUIMessage msgTv = new GUIMessage(GUIMessage.MessageType.GUI_MSG_RECORDER_STOP_TIMESHIFT, 0, 0, 0, 0, 0, null);
-        //GUIWindowManager.SendMessage(msgTv);
+        // stop time shifting TV
         _currentStep = 0;
         _currentStepIndex = -1;
         _seekTimer = DateTime.MinValue;
         _isInitialized = true;
         _subs = null;
         Log.Info("g_Player.PlayAudioStream({0})", strURL);
-        if (Player != null)
+        if (_player != null)
         {
           GUIGraphicsContext.ShowBackground = true;
           OnChanged(strURL);
           OnStopped();
-          if (Player != null)
+          if (_player != null)
           {
-            Player.Stop();
+            _player.Stop();
           }
           CachePlayer();
           GUIGraphicsContext.form.Invalidate(true);
-          Player = null;
+          _player = null;
         }
 
         if (strAudioPlayer == "BASS engine" && !isMusicVideo)
@@ -1477,27 +1017,27 @@ namespace MediaPortal.Player
           {
             BassMusicPlayer.Player.InitBass();
           }
-          Player = BassMusicPlayer.Player;
+          _player = BassMusicPlayer.Player;
         }
         else
         {
-          Player = new AudioPlayerWMP9();
+          _player = new AudioPlayerWMP9();
         }
-        Player = CachePreviousPlayer(Player);
-        var result = Player.Play(strURL);
+        _player = CachePreviousPlayer(_player);
+        var result = _player.Play(strURL);
         if (!result)
         {
           Log.Info("player:ended");
-          Player.SafeDispose();
-          Player = null;
+          _player.SafeDispose();
+          _player = null;
           _subs = null;
           GC.Collect();
           GC.Collect();
           GC.Collect();
         }
-        else if (Player.Playing)
+        else if (_player.Playing)
         {
-          _currentFilePlaying = Player.CurrentFile;
+          _currentFilePlaying = _player.CurrentFile;
           OnStarted();
         }
         _isInitialized = false;
@@ -1539,61 +1079,61 @@ namespace MediaPortal.Player
         _isInitialized = true;
         _subs = null;
         Log.Info("g_Player.PlayVideoStream({0})", strURL);
-        if (Player != null)
+        if (_player != null)
         {
           GUIGraphicsContext.ShowBackground = true;
           OnChanged(strURL);
           OnStopped();
-          if (Player != null)
+          if (_player != null)
           {
-            Player.Stop();
+            _player.Stop();
           }
           CachePlayer();
           GUIGraphicsContext.form.Invalidate(true);
-          Player = null;
+          _player = null;
           GC.Collect();
           GC.Collect();
           GC.Collect();
           GC.Collect();
         }
 
-        //int iUseVMR9inMYMovies = 0;
-        //using (MediaPortal.Profile.Settings xmlreader = new MediaPortal.Profile.MPSettings())
-        //{
-        //  iUseVMR9inMYMovies = xmlreader.GetValueAsInt("movieplayer", "vmr9", 1);
-        //}
-        //if (iUseVMR9inMYMovies == 0)
-        //  _player = new Player.VideoPlayerVMR7();
-        //else
-        Player = new VideoPlayerVMR9();
-        Player = CachePreviousPlayer(Player);
-        var isPlaybackPossible = !String.IsNullOrEmpty(streamName) ? Player.PlayStream(strURL, streamName) : Player.Play(strURL);
+        _player = new VideoPlayerVMR9();
+        _player = CachePreviousPlayer(_player);
+        bool isPlaybackPossible;
+        if (streamName != null)
+        {
+          isPlaybackPossible = streamName != "" ? _player.PlayStream(strURL, streamName) : _player.Play(strURL);
+        }
+        else
+        {
+          isPlaybackPossible = _player.Play(strURL);
+        }
         if (!isPlaybackPossible)
         {
           Log.Info("player:ended");
-          Player.SafeDispose();
-          Player = null;
+          _player.SafeDispose();
+          _player = null;
           _subs = null;
           GC.Collect();
           GC.Collect();
           GC.Collect();
           //2nd try
-          Player = new VideoPlayerVMR9();
-          isPlaybackPossible = Player.Play(strURL);
+          _player = new VideoPlayerVMR9();
+          isPlaybackPossible = _player.Play(strURL);
           if (!isPlaybackPossible)
           {
             Log.Info("player2:ended");
-            Player.SafeDispose();
-            Player = null;
+            _player.SafeDispose();
+            _player = null;
             _subs = null;
             GC.Collect();
             GC.Collect();
             GC.Collect();
           }
         }
-        else if (Player.Playing)
+        else if (_player.Playing)
         {
-          _currentFilePlaying = Player.CurrentFile;
+          _currentFilePlaying = _player.CurrentFile;
           OnStarted();
         }
         _isInitialized = false;
@@ -1611,19 +1151,13 @@ namespace MediaPortal.Player
 
     private static IPlayer CachePreviousPlayer(IPlayer newPlayer)
     {
-      var player = newPlayer;
+      IPlayer player = newPlayer;
       if (newPlayer != null)
       {
-        if (_prevPlayer != null)
+        if (_prevPlayer != null && (_prevPlayer.GetType() == newPlayer.GetType() && _prevPlayer.SupportsReplay))
         {
-          if (_prevPlayer.GetType() == newPlayer.GetType())
-          {
-            if (_prevPlayer.SupportsReplay)
-            {
-              player = _prevPlayer;
-              _prevPlayer = null;
-            }
-          }
+          player = _prevPlayer;
+          _prevPlayer = null;
         }
         if (_prevPlayer != null)
         {
@@ -1641,7 +1175,7 @@ namespace MediaPortal.Player
 
     public static bool Play(string strFile, MediaType type)
     {
-      return Play(strFile, type, (TextReader) null);
+      return Play(strFile, type, (TextReader)null);
     }
 
     public static bool Play(string strFile, MediaType type, string chapters)
@@ -1667,11 +1201,15 @@ namespace MediaPortal.Player
         {
           var extension = s.ToLower();
           var isImageFile = VirtualDirectory.IsImageFile(extension);
-          if (isImageFile && (!File.Exists(DaemonTools.GetVirtualDrive() + @"\VIDEO_TS\VIDEO_TS.IFO") && !File.Exists(DaemonTools.GetVirtualDrive() + @"\BDMV\index.bdmv")))
+          if (isImageFile)
           {
-            _currentFilePlaying = strFile;
-            AutoPlay.ExamineCD(DaemonTools.GetVirtualDrive(), true);
-            return true;
+            if (!File.Exists(DaemonTools.GetVirtualDrive() + @"\VIDEO_TS\VIDEO_TS.IFO") &&
+                !File.Exists(DaemonTools.GetVirtualDrive() + @"\BDMV\index.bdmv"))
+            {
+              _currentFilePlaying = strFile;
+              Ripper.AutoPlay.ExamineCD(DaemonTools.GetVirtualDrive(), true);
+              return true;
+            }
           }
 
           if (Util.Utils.IsDVD(strFile))
@@ -1682,15 +1220,19 @@ namespace MediaPortal.Player
           _mediaInfo = new MediaInfoWrapper(strFile);
           Starting = true;
 
-          if (Util.Utils.IsVideo(strFile) || Util.Utils.IsLiveTv(strFile)) //video, tv, rtsp
+          if (Util.Utils.IsVideo(strFile) || Util.Utils.IsLiveTv(strFile)) // video, TV, rtsp
           {
             if (type == MediaType.Unknown)
             {
-              Log.Debug("g_Player.Play - Mediatype Unknown, forcing detection as Video");
+              Log.Debug("g_Player.Play - Media Type Unknown, forcing detection as Video");
               type = MediaType.Video;
             }
-            // refresh rate change done here.
-            RefreshRateChanger.AdaptRefreshRate(strFile, (RefreshRateChanger.MediaType) (int) type);
+
+            // Refresh rate change done here. Blu-ray player will handle the refresh rate changes by itself
+            if (strFile.ToUpper().IndexOf(@"\BDMV\INDEX.BDMV", StringComparison.Ordinal) == -1)
+            {
+              RefreshRateChanger.AdaptRefreshRate(strFile, (RefreshRateChanger.MediaType)(int)type);
+            }
 
             if (RefreshRateChanger.RefreshRateChangePending)
             {
@@ -1715,7 +1257,7 @@ namespace MediaPortal.Player
           _isInitialized = true;
           _subs = null;
 
-          if (Player != null)
+          if (_player != null)
           {
             GUIGraphicsContext.ShowBackground = true;
             OnChanged(strFile);
@@ -1734,41 +1276,40 @@ namespace MediaPortal.Player
             }
             if (doStop)
             {
-              if (Player != null)
+              if (_player != null)
               {
-                Player.Stop();
+                _player.Stop();
               }
               CachePlayer();
-              Player = null;
+              _player = null;
             }
           }
 
           Log.Info("g_Player.Play({0} {1})", strFile, type);
           if (!Util.Utils.IsAVStream(strFile) && Util.Utils.IsVideo(strFile))
           {
-            if (!Util.Utils.IsRTSP(strFile) && extension != ".ts") // do not play recorded tv with external player
+            if (!Util.Utils.IsRTSP(strFile) && extension != ".ts") // do not play recorded TV with external player
             {
               using (Settings xmlreader = new MPSettings())
               {
-                var bInternal = xmlreader.GetValueAsBool("movieplayer", "internal", true);
-                var bInternalDVD = xmlreader.GetValueAsBool("dvdplayer", "internal", true);
+                var internalPlayer = xmlreader.GetValueAsBool("movieplayer", "internal", true);
+                var internalDVD = xmlreader.GetValueAsBool("dvdplayer", "internal", true);
 
                 // External player extension filter
                 _externalPlayerExtensions = xmlreader.GetValueAsString("movieplayer", "extensions", "");
-                if (!bInternal && !string.IsNullOrEmpty(_externalPlayerExtensions) &&
-                    extension != ".ifo" && extension != ".vob" && !Util.Utils.IsDVDImage(strFile))
+                if (!internalPlayer && !string.IsNullOrEmpty(_externalPlayerExtensions) &&
+                    extension != ".ifo" && extension != ".vob" && !Util.Utils.IsDVDImage(strFile) &&
+                    !CheckExtension(strFile))
                 {
-                  // Do not use external player if file ext is not in the extension list
-                  if (!CheckExtension(strFile))
-                    bInternal = true;
+                  internalPlayer = true;
                 }
 
-                if ((!bInternalDVD && !isImageFile && (extension == ".ifo" || extension == ".vob")) ||
-                    (!bInternalDVD && isImageFile && Util.Utils.IsDVDImage(strFile)) ||
+                if ((!internalDVD && !isImageFile && (extension == ".ifo" || extension == ".vob")) ||
+                    (!internalDVD && isImageFile && Util.Utils.IsDVDImage(strFile)) ||
                     // No image and no DVD folder rips
-                    (!bInternal && !isImageFile && extension != ".ifo" && extension != ".vob") ||
+                    (!internalPlayer && !isImageFile && extension != ".ifo" && extension != ".vob") ||
                     // BluRay image
-                    (!bInternal && isImageFile && Util.Utils.IsBDImage(strFile))) // external player used
+                    (!internalPlayer && isImageFile && Util.Utils.IsBDImage(strFile))) // external player used
                 {
                   if (isImageFile)
                   {
@@ -1779,7 +1320,9 @@ namespace MediaPortal.Player
                       // Check for BluRayISO
                       strFile = DaemonTools.GetVirtualDrive() + (@"\BDMV\index.bdmv");
                       if (!File.Exists(strFile))
+                      {
                         return false;
+                      }
                     }
                   }
                   if (Util.Utils.PlayMovie(strFile))
@@ -1800,9 +1343,9 @@ namespace MediaPortal.Player
         Util.Utils.IsBDImage(strFile, ref strFile);
 
         _currentFileName = strFile;
-        Player = _factory.Create(strFile, type);
+        _player = _factory.Create(strFile, type);
 
-        if (Player != null)
+        if (_player != null)
         {
           if (chapters != null)
           {
@@ -1812,31 +1355,27 @@ namespace MediaPortal.Player
           {
             LoadChapters(strFile);
           }
-          Player = CachePreviousPlayer(Player);
-          var bResult = Player.Play(strFile);
-          if (!bResult)
+          _player = CachePreviousPlayer(_player);
+          var result = _player.Play(strFile);
+          if (!result)
           {
             Log.Info("g_Player: ended");
-            Player.SafeDispose();
-            Player = null;
+            _player.SafeDispose();
+            _player = null;
             _subs = null;
             UnableToPlay(strFile, type);
           }
-          else if (Player.Playing)
+          else if (_player.Playing)
           {
             _isInitialized = false;
-            _currentFilePlaying = Player.CurrentFile;
-            //if (_chapters == null)
-            //{
-            //  _chapters = _player.Chapters;
-            //}
+            _currentFilePlaying = _player.CurrentFile;
             if (_chaptersname == null)
             {
-              _chaptersname = Player.ChaptersName;
+              _chaptersname = _player.ChaptersName;
             }
             OnStarted();
           }
-          return bResult;
+          return result;
         }
       }
       finally
@@ -1847,13 +1386,314 @@ namespace MediaPortal.Player
       return false;
     }
 
+    public static bool IsExternalPlayer
+    {
+      get
+      {
+        return _player != null && _player.IsExternal;
+      }
+    }
+
+    public static bool IsRadio
+    {
+      get
+      {
+        return _player != null && (_player.IsRadio);
+      }
+    }
+
+    public static bool IsMusic
+    {
+      get
+      {
+        if (_player == null)
+        {
+          return false;
+        }
+        return (_currentMedia == MediaType.Music);
+      }
+    }
+
+    public static bool Playing
+    {
+      get
+      {
+        if (_player == null)
+        {
+          return false;
+        }
+        return !_isInitialized && _player.Playing;
+      }
+    }
+
+    public static int PlaybackType
+    {
+      get
+      {
+        if (_player == null)
+        {
+          return -1;
+        }
+        return _player.PlaybackType;
+      }
+    }
+
+    public static bool Paused
+    {
+      get
+      {
+        return _player != null && _player.Paused;
+      }
+    }
+
+    public static bool Stopped
+    {
+      get
+      {
+        if (_isInitialized)
+        {
+          return false;
+        }
+        return _player != null && _player.Stopped;
+      }
+    }
+
+    public static int Speed
+    {
+      get
+      {
+        return _player == null ? 1 : _player.Speed;
+      }
+      set
+      {
+        if (_player == null)
+        {
+          return;
+        }
+        _player.Speed = value;
+        _currentStep = 0;
+        _currentStepIndex = -1;
+        _seekTimer = DateTime.MinValue;
+      }
+    }
+
+    public static string CurrentFile
+    {
+      get
+      {
+        return _player == null ? "" : _player.CurrentFile;
+      }
+    }
+
+    public static int Volume
+    {
+      get
+      {
+        if (_player == null)
+        {
+          return -1;
+        }
+        return _player.Volume;
+      }
+      set
+      {
+        if (_player != null)
+        {
+          _player.Volume = value;
+        }
+      }
+    }
+
+    public static Geometry.Type ARType
+    {
+      get { return GUIGraphicsContext.ARType; }
+      set
+      {
+        if (_player != null)
+        {
+          _player.ARType = value;
+        }
+      }
+    }
+
+    public static int PositionX
+    {
+      get
+      {
+        return _player == null ? 0 : _player.PositionX;
+      }
+      set
+      {
+        if (_player != null)
+        {
+          _player.PositionX = value;
+        }
+      }
+    }
+
+    public static int PositionY
+    {
+      get
+      {
+        return _player == null ? 0 : _player.PositionY;
+      }
+      set
+      {
+        if (_player != null)
+        {
+          _player.PositionY = value;
+        }
+      }
+    }
+
+    public static int RenderWidth
+    {
+      get
+      {
+        return _player == null ? 0 : _player.RenderWidth;
+      }
+      set
+      {
+        if (_player != null)
+        {
+          _player.RenderWidth = value;
+        }
+      }
+    }
+
+    public static bool Visible
+    {
+      get
+      {
+        return _player != null && _player.Visible;
+      }
+      set
+      {
+        if (_player != null)
+        {
+          _player.Visible = value;
+        }
+      }
+    }
+
+    public static int RenderHeight
+    {
+      get
+      {
+        return _player == null ? 0 : _player.RenderHeight;
+      }
+      set
+      {
+        if (_player != null)
+        {
+          _player.RenderHeight = value;
+        }
+      }
+    }
+
+    public static double Duration
+    {
+      get
+      {
+        return _player == null ? 0 : _player.Duration;
+      }
+    }
+
+    public static double CurrentPosition
+    {
+      get
+      {
+        return _player == null ? 0 : _player.CurrentPosition;
+      }
+    }
+
+    public static double StreamPosition
+    {
+      get
+      {
+        return _player == null ? 0 : _player.StreamPosition;
+      }
+    }
+
+    public static double ContentStart
+    {
+      get
+      {
+        return _player == null ? 0 : _player.ContentStart;
+      }
+    }
+
+    public static bool FullScreen
+    {
+      get
+      {
+        return _player == null ? GUIGraphicsContext.IsFullScreenVideo : _player.FullScreen;
+      }
+      set
+      {
+        if (_player != null)
+        {
+          _player.FullScreen = value;
+        }
+      }
+    }
+
+    public static double[] Chapters
+    {
+      get
+      {
+        if (_player == null && _chapters == null)
+        {
+          return null;
+        }
+        return _chapters ?? _player.Chapters;
+      }
+    }
+
+    public static string[] ChaptersName
+    {
+      get
+      {
+        if (_player == null)
+        {
+          return null;
+        }
+        _chaptersname = _player.ChaptersName;
+        return _chaptersname;
+      }
+    }
+
+    public static double[] JumpPoints
+    {
+      get
+      {
+        return _jumpPoints;
+      }
+    }
+
+    public static int Width
+    {
+      get
+      {
+        return _player == null ? 0 : _player.Width;
+      }
+    }
+
+    public static int Height
+    {
+      get
+      {
+        return _player == null ? 0 : _player.Height;
+      }
+    }
+
     public static void SeekRelative(double dTime)
     {
-      if (Player == null)
+      if (_player == null)
       {
         return;
       }
-      Player.SeekRelative(dTime);
+      _player.SeekRelative(dTime);
       _currentStep = 0;
       _currentStepIndex = -1;
       _seekTimer = DateTime.MinValue;
@@ -1863,22 +1703,21 @@ namespace MediaPortal.Player
 
     public static void StepNow()
     {
-      if (_currentStep != 0 && Player != null)
+      if (_currentStep != 0 && _player != null)
       {
-        if (_currentStep < 0 || (Player.CurrentPosition + 4 < Player.Duration) || !IsTV)
+        if (_currentStep < 0 || (_player.CurrentPosition + 4 < _player.Duration) || !IsTV)
         {
-          var dTime = _currentStep + Player.CurrentPosition;
-          Log.Debug("g_Player.StepNow() - Preparing to seek to {0}:{1}", Player.CurrentPosition, Player.Duration);
-          if (!IsTV && (dTime > Player.Duration)) dTime = Player.Duration - 5;
-          if (IsTV && (dTime + 3 > Player.Duration)) dTime = Player.Duration - 3; // Margin for live Tv
+          var dTime = _currentStep + _player.CurrentPosition;
+          Log.Debug("g_Player.StepNow() - Preparing to seek to {0}:{1}", _player.CurrentPosition, _player.Duration);
+          if (!IsTV && (dTime > _player.Duration)) dTime = _player.Duration - 5;
+          if (IsTV && (dTime + 3 > _player.Duration)) dTime = _player.Duration - 3; // Margin for live TV
           if (dTime < 0) dTime = 0d;
 
-          Log.Debug("g_Player.StepNow() - Preparing to seek to {0}:{1}:{2} isTv {3}", (int) (dTime/3600d),
-                    (int) ((dTime%3600d)/60d), (int) (dTime%60d), IsTV);
-          Player.SeekAbsolute(dTime);
+          Log.Debug("g_Player.StepNow() - Preparing to seek to {0}:{1}:{2} isTv {3}", (int)(dTime / 3600d),
+                    (int)((dTime % 3600d) / 60d), (int)(dTime % 60d), IsTV);
+          _player.SeekAbsolute(dTime);
           Speed = Speed;
-          var msgUpdate = new GUIMessage(GUIMessage.MessageType.GUI_MSG_PLAYER_POSITION_CHANGED, 0, 0, 0, 0, 0,
-                                         null);
+          var msgUpdate = new GUIMessage(GUIMessage.MessageType.GUI_MSG_PLAYER_POSITION_CHANGED, 0, 0, 0, 0, 0, null);
           GUIGraphicsContext.SendMessage(msgUpdate);
         }
       }
@@ -1888,10 +1727,10 @@ namespace MediaPortal.Player
     }
 
     /// <summary>
-    ///   This function returns the localized time units for "Step" (seconds) in human readable format.
+    /// This function returns the localized time units for "Step" (seconds) in human readable format.
     /// </summary>
-    /// <param name="step"> </param>
-    /// <returns> </returns>
+    /// <param name="step"></param>
+    /// <returns></returns>
     public static string GetSingleStep(int step)
     {
       if (step >= 0)
@@ -1899,73 +1738,76 @@ namespace MediaPortal.Player
         if (step >= 3600)
         {
           // check for 'full' hours
-          if ((Convert.ToSingle(step)/3600) > 1 && (Convert.ToSingle(step)/3600) != 2 &&
-              (Convert.ToSingle(step)/3600) != 3)
+          if ((Convert.ToSingle(step) / 3600) > 1 && (Convert.ToSingle(step) / 3600) != 2 &&
+              (Convert.ToSingle(step) / 3600) != 3)
           {
-            return "+ " + Convert.ToString(step/60) + " " + GUILocalizeStrings.Get(2998); // "min"
+            return "+ " + Convert.ToString(step / 60) + " " + GUILocalizeStrings.Get(2998); // "min"
           }
-          return "+ " + Convert.ToString(step/3600) + " " + GUILocalizeStrings.Get(2997); // "hrs"
+          return "+ " + Convert.ToString(step / 3600) + " " + GUILocalizeStrings.Get(2997); // "hrs"
         }
         if (step >= 60)
         {
-          return "+ " + Convert.ToString(step/60) + " " + GUILocalizeStrings.Get(2998); // "min"
+          return "+ " + Convert.ToString(step / 60) + " " + GUILocalizeStrings.Get(2998); // "min"
         }
         return "+ " + Convert.ToString(step) + " " + GUILocalizeStrings.Get(2999); // "sec"
       }
-      
       if (step <= -3600)
       {
-        if ((Convert.ToSingle(step)/3600) < -1 && (Convert.ToSingle(step)/3600) != -2 &&
-            (Convert.ToSingle(step)/3600) != -3)
+        if ((Convert.ToSingle(step) / 3600) < -1 && (Convert.ToSingle(step) / 3600) != -2 &&
+            (Convert.ToSingle(step) / 3600) != -3)
         {
-          return "- " + Convert.ToString(Math.Abs(step/60)) + " " + GUILocalizeStrings.Get(2998); // "min"
+          return "- " + Convert.ToString(Math.Abs(step / 60)) + " " + GUILocalizeStrings.Get(2998); // "min"
         }
-        return "- " + Convert.ToString(Math.Abs(step/3600)) + " " + GUILocalizeStrings.Get(2997); // "hrs"
+        return "- " + Convert.ToString(Math.Abs(step / 3600)) + " " + GUILocalizeStrings.Get(2997); // "hrs"
       }
       if (step <= -60)
       {
-        return "- " + Convert.ToString(Math.Abs(step/60)) + " " + GUILocalizeStrings.Get(2998); // "min"
+        return "- " + Convert.ToString(Math.Abs(step / 60)) + " " + GUILocalizeStrings.Get(2998); // "min"
       }
       return "- " + Convert.ToString(Math.Abs(step)) + " " + GUILocalizeStrings.Get(2999); // "sec"
     }
 
     public static string GetStepDescription()
     {
-      if (Player == null)
+      if (_player == null)
       {
         return "";
       }
-      var timetoStep = _currentStep;
-      if (timetoStep == 0)
+      var timeToSleep = _currentStep;
+      if (timeToSleep == 0)
       {
         return "";
       }
-      Player.Process();
-      if (Player.CurrentPosition + timetoStep <= 0)
+      _player.Process();
+      if (_player.CurrentPosition + timeToSleep <= 0)
       {
         return GUILocalizeStrings.Get(773); // "START"
       }
-      return Player.CurrentPosition + timetoStep >= Player.Duration ? GUILocalizeStrings.Get(774) : GetSingleStep(_currentStep);
+      if (_player.CurrentPosition + timeToSleep >= _player.Duration)
+      {
+        return GUILocalizeStrings.Get(774); // "END"
+      }
+      return GetSingleStep(_currentStep);
     }
 
-    public static int GetSeekStep(out bool seekStart, out bool seekEnd)
+    public static int GetSeekStep(out bool start, out bool end)
     {
-      seekStart = false;
-      seekEnd = false;
-      if (Player == null)
+      start = false;
+      end = false;
+      if (_player == null)
       {
         return 0;
       }
-      var timeToStep = _currentStep;
-      if (Player.CurrentPosition + timeToStep <= 0)
+      var timeToSleep = _currentStep;
+      if (_player.CurrentPosition + timeToSleep <= 0)
       {
-        seekStart = true; 
+        start = true; //start
       }
-      if (Player.CurrentPosition + timeToStep >= Player.Duration)
+      if (_player.CurrentPosition + timeToSleep >= _player.Duration)
       {
-        seekEnd = true;
+        end = true;
       }
-      return timeToStep;
+      return timeToSleep;
     }
 
     public static void SeekStep(bool fastForward)
@@ -1986,7 +1828,7 @@ namespace MediaPortal.Player
           }
           else
           {
-            _currentStep = -1*Convert.ToInt32(_seekStepList[_currentStepIndex]);
+            _currentStep = -1 * Convert.ToInt32(_seekStepList[_currentStepIndex]);
           }
         }
         else
@@ -2013,7 +1855,7 @@ namespace MediaPortal.Player
           }
           else
           {
-            _currentStep = -1*Convert.ToInt32(_seekStepList[_currentStepIndex]);
+            _currentStep = -1 * Convert.ToInt32(_seekStepList[_currentStepIndex]);
           }
         }
         else
@@ -2027,11 +1869,11 @@ namespace MediaPortal.Player
 
     public static void SeekRelativePercentage(int iPercentage)
     {
-      if (Player == null)
+      if (_player == null)
       {
         return;
       }
-      Player.SeekRelativePercentage(iPercentage);
+      _player.SeekRelativePercentage(iPercentage);
       var msgUpdate = new GUIMessage(GUIMessage.MessageType.GUI_MSG_PLAYER_POSITION_CHANGED, 0, 0, 0, 0, 0, null);
       GUIGraphicsContext.SendMessage(msgUpdate);
       _currentStep = 0;
@@ -2041,13 +1883,13 @@ namespace MediaPortal.Player
 
     public static void SeekAbsolute(double dTime)
     {
-      if (Player == null)
+      if (_player == null)
       {
         return;
       }
-      Log.Debug("g_Player.SeekAbsolute() - Preparing to seek to {0}:{1}:{2}", (int) (dTime/3600d),
-                (int) ((dTime%3600d)/60d), (int) (dTime%60d));
-      Player.SeekAbsolute(dTime);
+      Log.Debug("g_Player.SeekAbsolute() - Preparing to seek to {0}:{1}:{2}", (int)(dTime / 3600d),
+                (int)((dTime % 3600d) / 60d), (int)(dTime % 60d));
+      _player.SeekAbsolute(dTime);
       var msgUpdate = new GUIMessage(GUIMessage.MessageType.GUI_MSG_PLAYER_POSITION_CHANGED, 0, 0, 0, 0, 0, null);
       GUIGraphicsContext.SendMessage(msgUpdate);
       _currentStep = 0;
@@ -2057,11 +1899,11 @@ namespace MediaPortal.Player
 
     public static void SeekAsolutePercentage(int iPercentage)
     {
-      if (Player == null)
+      if (_player == null)
       {
         return;
       }
-      Player.SeekAsolutePercentage(iPercentage);
+      _player.SeekAsolutePercentage(iPercentage);
       var msgUpdate = new GUIMessage(GUIMessage.MessageType.GUI_MSG_PLAYER_POSITION_CHANGED, 0, 0, 0, 0, 0, null);
       GUIGraphicsContext.SendMessage(msgUpdate);
       _currentStep = 0;
@@ -2069,9 +1911,61 @@ namespace MediaPortal.Player
       _seekTimer = DateTime.MinValue;
     }
 
+    public static bool HasVideo
+    {
+      get
+      {
+        if (RefreshRateChanger.RefreshRateChangePending)
+        {
+          return true;
+        }
+        return _player != null && _player.HasVideo;
+      }
+    }
+
+    public static bool HasViz
+    {
+      get
+      {
+        if (RefreshRateChanger.RefreshRateChangePending)
+        {
+          return true;
+        }
+        return _player != null && _player.HasViz;
+      }
+    }
+
+    public static bool IsVideo
+    {
+      get
+      {
+        if (RefreshRateChanger.RefreshRateChangePending && RefreshRateChanger.RefreshRateChangeMediaType == RefreshRateChanger.MediaType.Video)
+        {
+          return true;
+        }
+        if (_player == null)
+        {
+          return false;
+        }
+        return _currentMedia == MediaType.Video;
+      }
+    }
+
+    public static bool HasSubs
+    {
+      get
+      {
+        if (_player == null)
+        {
+          return false;
+        }
+        return (_subs != null);
+      }
+    }
+
     public static void RenderSubtitles()
     {
-      if (Player == null)
+      if (_player == null)
       {
         return;
       }
@@ -2081,17 +1975,17 @@ namespace MediaPortal.Player
       }
       if (HasSubs)
       {
-        _subs.Render(Player.CurrentPosition);
+        _subs.Render(_player.CurrentPosition);
       }
     }
 
     public static void WndProc(ref Message m)
     {
-      if (Player == null)
+      if (_player == null)
       {
         return;
       }
-      Player.WndProc(ref m);
+      _player.WndProc(ref m);
     }
 
     public static void Process()
@@ -2101,19 +1995,19 @@ namespace MediaPortal.Player
         VMR9Util.g_vmr9.Process();
         VMR9Util.g_vmr9.Repaint();
       }
-      if (Player == null)
+      if (_player == null)
       {
         return;
       }
-      Player.Process();
-      if (Player.Initializing)
+      _player.Process();
+      if (_player.Initializing)
       {
         return;
       }
-      if (!Player.Playing)
+      if (!_player.Playing)
       {
         Log.Info("g_Player.Process() player stopped...");
-        if (Player.Ended)
+        if (_player.Ended)
         {
           var msg = new GUIMessage(GUIMessage.MessageType.GUI_MSG_PLAYBACK_ENDED, 0, 0, 0, 0, 0, null);
           GUIWindowManager.SendThreadMessage(msg);
@@ -2135,18 +2029,15 @@ namespace MediaPortal.Player
             StepNow();
           }
         }
-        else if (_autoComSkip && JumpPoints != null && Player.Speed == 1)
+        else if (_autoComSkip && JumpPoints != null && _player.Speed == 1)
         {
-          var currentPos = Player.CurrentPosition;
-          foreach (var jumpFrom in JumpPoints)
+          var currentPos = _player.CurrentPosition;
+          foreach (var jumpFrom in JumpPoints.Where(jumpFrom => jumpFrom != 0 && currentPos <= jumpFrom + 1.0 && currentPos >= jumpFrom - 0.1))
           {
-            if (jumpFrom != 0 && currentPos <= jumpFrom + 1.0 && currentPos >= jumpFrom - 0.1)
-            {
-              Log.Debug("g_Player.Process() - Current Position: {0}, JumpPoint: {1}", currentPos, jumpFrom);
+            Log.Debug("g_Player.Process() - Current Position: {0}, JumpPoint: {1}", currentPos, jumpFrom);
 
-              JumpToNextChapter();
-              break;
-            }
+            JumpToNextChapter();
+            break;
           }
         }
       }
@@ -2154,36 +2045,333 @@ namespace MediaPortal.Player
 
     public static VideoStreamFormat GetVideoFormat()
     {
-      return Player == null ? new VideoStreamFormat() : Player.GetVideoFormat();
+      return _player == null ? new VideoStreamFormat() : _player.GetVideoFormat();
     }
 
     public static eAudioDualMonoMode GetAudioDualMonoMode()
     {
-      return Player == null ? eAudioDualMonoMode.UNSUPPORTED : Player.GetAudioDualMonoMode();
+      return _player == null ? eAudioDualMonoMode.UNSUPPORTED : _player.GetAudioDualMonoMode();
     }
 
     public static bool SetAudioDualMonoMode(eAudioDualMonoMode mode)
     {
-      return Player != null && Player.SetAudioDualMonoMode(mode);
+      return _player != null && _player.SetAudioDualMonoMode(mode);
     }
 
     public static void OnZapping(int info)
     {
-      if (Player == null)
+      if (_player == null)
       {
         return;
       }
       OnTVChannelChanged();
-      Player.OnZapping(info);
+      _player.OnZapping(info);
+    }
+
+    #region Edition selection
+
+    /// <summary>
+    /// Property which returns the total number of edition streams available
+    /// </summary>
+    public static int EditionStreams
+    {
+      get
+      {
+        return _player == null ? 0 : _player.EditionStreams;
+      }
+    }
+
+    /// <summary>
+    /// Property to get/set the current edition stream
+    /// </summary>
+    public static int CurrentEditionStream
+    {
+      get
+      {
+        return _player == null ? 0 : _player.CurrentEditionStream;
+      }
+      set
+      {
+        if (_player != null)
+        {
+          _player.CurrentEditionStream = value;
+        }
+      }
+    }
+
+    public static string EditionLanguage(int iStream)
+    {
+      if (_player == null)
+      {
+        return Strings.Unknown;
+      }
+
+      var stream = _player.EditionLanguage(iStream);
+      return Util.Utils.TranslateLanguageString(stream);
+    }
+
+    /// <summary>
+    /// Property to get the type of an edition stream
+    /// </summary>
+    public static string EditionType(int iStream)
+    {
+      if (_player == null)
+      {
+        return Strings.Unknown;
+      }
+
+      var stream = _player.EditionType(iStream);
+      return stream;
+    }
+
+    #endregion
+
+    #region Video selection
+
+    /// <summary>
+    /// Property which returns the total number of video streams available
+    /// </summary>
+    public static int VideoStreams
+    {
+      get
+      {
+        return _player == null ? 0 : _player.VideoStreams;
+      }
+    }
+
+    /// <summary>
+    /// Property to get/set the current video stream
+    /// </summary>
+    public static int CurrentVideoStream
+    {
+      get
+      {
+        return _player == null ? 0 : _player.CurrentVideoStream;
+      }
+      set
+      {
+        if (_player != null)
+        {
+          _player.CurrentVideoStream = value;
+        }
+      }
+    }
+
+    public static string VideoLanguage(int iStream)
+    {
+      if (_player == null)
+      {
+        return Strings.Unknown;
+      }
+
+      var stream = _player.VideoLanguage(iStream);
+      return Util.Utils.TranslateLanguageString(stream);
+    }
+
+    /// <summary>
+    /// Property to get the type of an edition stream
+    /// </summary>
+    public static string VideoType(int iStream)
+    {
+      if (_player == null)
+      {
+        return Strings.Unknown;
+      }
+
+      var stream = _player.VideoType(iStream);
+      return stream;
+    }
+
+    #endregion
+
+    #region Postprocessing selection
+
+    /// <summary>
+    /// Property which returns true if the player is able to perform postprocessing features
+    /// </summary>
+    public static bool HasPostprocessing
+    {
+      get
+      {
+        return _player != null && _player.HasPostprocessing;
+      }
+    }
+
+    #endregion
+
+    #region subtitle/audio stream selection
+
+    /// <summary>
+    /// Property which returns the total number of audio streams available
+    /// </summary>
+    public static int AudioStreams
+    {
+      get
+      {
+        return _player == null ? 0 : _player.AudioStreams;
+      }
+    }
+
+    /// <summary>
+    /// Property to get/set the current audio stream
+    /// </summary>
+    public static int CurrentAudioStream
+    {
+      get
+      {
+        return _player == null ? 0 : _player.CurrentAudioStream;
+      }
+      set
+      {
+        if (_player != null)
+        {
+          _player.CurrentAudioStream = value;
+        }
+      }
+    }
+
+    /// <summary>
+    /// Property to get the name for an audio stream
+    /// </summary>
+    public static string AudioLanguage(int iStream)
+    {
+      if (_player == null)
+      {
+        return Strings.Unknown;
+      }
+
+      var stream = _player.AudioLanguage(iStream);
+      return Util.Utils.TranslateLanguageString(stream);
+    }
+
+    /// <summary>
+    /// Property to get the type of an audio stream
+    /// </summary>
+    public static string AudioType(int iStream)
+    {
+      if (_player == null)
+      {
+        return Strings.Unknown;
+      }
+
+      var stream = _player.AudioType(iStream);
+      return stream;
+    }
+
+    /// <summary>
+    /// Property to get the total number of subtitle streams
+    /// </summary>
+    public static int SubtitleStreams
+    {
+      get
+      {
+        return _player == null ? 0 : _player.SubtitleStreams;
+      }
+    }
+
+    /// <summary>
+    /// Property to get/set the current subtitle stream
+    /// </summary>
+    public static int CurrentSubtitleStream
+    {
+      get
+      {
+        return _player == null ? 0 : _player.CurrentSubtitleStream;
+      }
+      set
+      {
+        if (_player != null)
+        {
+          _player.CurrentSubtitleStream = value;
+        }
+      }
+    }
+
+    /// <summary>
+    /// Property to get/set the name for a subtitle stream
+    /// </summary>
+    public static string SubtitleLanguage(int iStream)
+    {
+      if (_player == null)
+      {
+        return Strings.Unknown;
+      }
+
+      var stream = _player.SubtitleLanguage(iStream);
+      return Util.Utils.TranslateLanguageString(stream);
+    }
+
+    /// <summary>
+    /// Retrieves the name of the subtitle stream
+    /// </summary>
+    /// <param name="iStream">Index of the stream</param>
+    /// <returns>Name of the track</returns>
+    public static string SubtitleName(int iStream)
+    {
+      if (_player == null)
+      {
+        return null;
+      }
+
+      var stream = _player.SubtitleName(iStream);
+      return Util.Utils.TranslateLanguageString(stream);
+    }
+
+    #endregion
+
+    public static bool EnableSubtitle
+    {
+      get
+      {
+        return _player != null && _player.EnableSubtitle;
+      }
+      set
+      {
+        if (_player == null)
+        {
+          return;
+        }
+        _player.EnableSubtitle = value;
+      }
+    }
+
+    public static bool EnableForcedSubtitle
+    {
+      get
+      {
+        return _player != null && _player.EnableForcedSubtitle;
+      }
+      set
+      {
+        if (_player == null)
+        {
+          return;
+        }
+        _player.EnableForcedSubtitle = value;
+      }
+    }
+
+    public static bool SupportsCC
+    {
+      get
+      {
+        if (IsDVD || IsTV || IsVideo)
+        {
+          var dvdPlayer = _player as DVDPlayer;
+          var tsReaderPlayer = _player as TSReaderPlayer;
+          return dvdPlayer != null ? dvdPlayer.SupportsCC : tsReaderPlayer != null && tsReaderPlayer.SupportsCC;
+        }
+        return false;
+      }
     }
 
     public static void SetVideoWindow()
     {
-      if (Player == null)
+      if (_player == null)
       {
         return;
       }
-      Player.SetVideoWindow();
+      _player.SetVideoWindow();
     }
 
     public static void Init()
@@ -2202,13 +2390,13 @@ namespace MediaPortal.Player
       {
         return;
       }
-      if (Player == null)
+      if (_player == null)
       {
         return;
       }
-      Player.Contrast = GUIGraphicsContext.Contrast;
-      Player.Brightness = GUIGraphicsContext.Brightness;
-      Player.Gamma = GUIGraphicsContext.Gamma;
+      _player.Contrast = GUIGraphicsContext.Contrast;
+      _player.Brightness = GUIGraphicsContext.Brightness;
+      _player.Gamma = GUIGraphicsContext.Gamma;
     }
 
     private static void OnVideoWindowChanged()
@@ -2232,46 +2420,85 @@ namespace MediaPortal.Player
       }
       var inTV = false;
       var windowId = GUIWindowManager.ActiveWindow;
-      if (windowId == (int) GUIWindow.Window.WINDOW_TV ||
-          windowId == (int) GUIWindow.Window.WINDOW_TVGUIDE ||
-          windowId == (int) GUIWindow.Window.WINDOW_SEARCHTV ||
-          windowId == (int) GUIWindow.Window.WINDOW_SCHEDULER ||
-          windowId == (int) GUIWindow.Window.WINDOW_RECORDEDTV)
+      if (windowId == (int)GUIWindow.Window.WINDOW_TV ||
+          windowId == (int)GUIWindow.Window.WINDOW_TVGUIDE ||
+          windowId == (int)GUIWindow.Window.WINDOW_SEARCHTV ||
+          windowId == (int)GUIWindow.Window.WINDOW_SCHEDULER ||
+          windowId == (int)GUIWindow.Window.WINDOW_RECORDEDTV)
       {
         inTV = true;
       }
       Visible = (FullScreen || GUIGraphicsContext.Overlay ||
-                 windowId == (int) GUIWindow.Window.WINDOW_SCHEDULER || inTV);
+                 windowId == (int)GUIWindow.Window.WINDOW_SCHEDULER || inTV);
       SetVideoWindow();
+    }
+
+    /// <summary>
+    /// returns video window rectangle
+    /// </summary>
+    public static Rectangle VideoWindow
+    {
+      get
+      {
+        return _player == null ? new Rectangle(0, 0, 0, 0) : _player.VideoWindow;
+      }
+    }
+
+    /// <summary>
+    /// returns video source rectangle displayed
+    /// </summary>
+    public static Rectangle SourceWindow
+    {
+      get
+      {
+        return _player == null ? new Rectangle(0, 0, 0, 0) : _player.SourceWindow;
+      }
     }
 
     public static int GetHDC()
     {
-      return Player == null ? 0 : Player.GetHDC();
+      return _player == null ? 0 : _player.GetHDC();
     }
 
     public static void ReleaseHDC(int hdc)
     {
-      if (Player == null)
+      if (_player == null)
       {
         return;
       }
-      Player.ReleaseHDC(hdc);
+      _player.ReleaseHDC(hdc);
+    }
+
+    public static bool CanSeek
+    {
+      get
+      {
+        if (_player == null)
+        {
+          return false;
+        }
+        return (_player.CanSeek() && !_player.IsDVDMenu);
+      }
+    }
+
+    public static MediaInfoWrapper MediaInfo
+    {
+      get { return _mediaInfo; }
     }
 
     /// <summary>
-    ///   Switches to the next audio stream.
+    /// Switches to the next audio stream.
     /// 
-    ///   Calls are directly pushed to the embedded player. And care 
-    ///   is taken not to do multiple calls to the player.
+    /// Calls are directly pushed to the embedded player. And care 
+    /// is taken not to do multiple calls to the player.
     /// </summary>
     public static void SwitchToNextAudio()
     {
-      if (Player != null)
+      if (_player != null)
       {
         // take current stream and number of
-        var streams = Player.AudioStreams;
-        var current = Player.CurrentAudioStream;
+        var streams = _player.AudioStreams;
+        var current = _player.CurrentAudioStream;
         var next = current;
         var success = false;
         // Loop over the stream, so we skip the disabled streams
@@ -2285,9 +2512,9 @@ namespace MediaPortal.Player
             next = 0;
           }
           // set the next stream
-          Player.CurrentAudioStream = next;
+          _player.CurrentAudioStream = next;
           // if the stream is set in, stop the loop
-          if (next == Player.CurrentAudioStream)
+          if (next == _player.CurrentAudioStream)
           {
             success = true;
           }
@@ -2302,7 +2529,7 @@ namespace MediaPortal.Player
     //}
 
     /// <summary>
-    ///   Switches to the next subtitle stream
+    /// Switches to the next subtitle stream
     /// </summary>
     public static void SwitchToNextSubtitle()
     {
@@ -2353,18 +2580,18 @@ namespace MediaPortal.Player
     }
 
     /// <summary>
-    ///   Switches to the next edition stream.
+    /// Switches to the next edition stream.
     /// 
-    ///   Calls are directly pushed to the embedded player. And care 
-    ///   is taken not to do multiple calls to the player.
+    /// Calls are directly pushed to the embedded player. And care 
+    /// is taken not to do multiple calls to the player.
     /// </summary>
     public static void SwitchToNextEdition()
     {
-      if (Player != null)
+      if (_player != null)
       {
         // take current stream and number of
-        var streams = Player.EditionStreams;
-        var current = Player.CurrentEditionStream;
+        var streams = _player.EditionStreams;
+        var current = _player.CurrentEditionStream;
         var next = current;
         var success = false;
         // Loop over the stream, so we skip the disabled streams
@@ -2378,9 +2605,9 @@ namespace MediaPortal.Player
             next = 0;
           }
           // set the next stream
-          Player.CurrentEditionStream = next;
+          _player.CurrentEditionStream = next;
           // if the stream is set in, stop the loop
-          if (next == Player.CurrentEditionStream)
+          if (next == _player.CurrentEditionStream)
           {
             success = true;
           }
@@ -2393,18 +2620,18 @@ namespace MediaPortal.Player
     }
 
     /// <summary>
-    ///   Switches to the next video stream.
+    /// Switches to the next video stream.
     /// 
-    ///   Calls are directly pushed to the embedded player. And care 
-    ///   is taken not to do multiple calls to the player.
+    /// Calls are directly pushed to the embedded player. And care 
+    /// is taken not to do multiple calls to the player.
     /// </summary>
     public static void SwitchToNextVideo()
     {
-      if (Player != null)
+      if (_player != null)
       {
         // take current stream and number of
-        var streams = Player.VideoStreams;
-        var current = Player.CurrentVideoStream;
+        var streams = _player.VideoStreams;
+        var current = _player.CurrentVideoStream;
         var next = current;
         var success = false;
         // Loop over the stream, so we skip the disabled streams
@@ -2418,9 +2645,9 @@ namespace MediaPortal.Player
             next = 0;
           }
           // set the next stream
-          Player.CurrentVideoStream = next;
+          _player.CurrentVideoStream = next;
           // if the stream is set in, stop the loop
-          if (next == Player.CurrentVideoStream)
+          if (next == _player.CurrentVideoStream)
           {
             success = true;
           }
@@ -2436,9 +2663,7 @@ namespace MediaPortal.Player
     {
       try
       {
-        using (new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.None))
-        {
-        }
+        using (new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.None)) { }
       }
       catch (IOException exp)
       {
@@ -2463,6 +2688,7 @@ namespace MediaPortal.Player
 
     // ReSharper disable UnusedMethodReturnValue.Local
     private static bool LoadChapters(string videoFile)
+    // ReSharper restore UnusedMethodReturnValue.Local
     {
       _chapters = null;
       _jumpPoints = null;
@@ -2480,7 +2706,6 @@ namespace MediaPortal.Player
         return LoadChapters(chapters);
       }
     }
-    // ReSharper restore UnusedMethodReturnValue.Local
 
     private static bool LoadChapters(TextReader chaptersReader)
     {
@@ -2513,7 +2738,7 @@ namespace MediaPortal.Player
           return false;
         }
 
-        var framesPerSecond = fps/100.0;
+        var framesPerSecond = fps / 100.0;
 
         while ((line = chaptersReader.ReadLine()) != null)
         {
@@ -2522,7 +2747,7 @@ namespace MediaPortal.Player
             continue;
           }
 
-          var tokens = line.Split(new[] {'\t'});
+          var tokens = line.Split(new[] { '\t' });
           if (tokens.Length != 2)
           {
             continue;
@@ -2531,12 +2756,12 @@ namespace MediaPortal.Player
           int time;
           if (int.TryParse(tokens[0], NumberStyles.Float, NumberFormatInfo.InvariantInfo, out time))
           {
-            jumps.Add(time/framesPerSecond);
+            jumps.Add(time / framesPerSecond);
           }
 
           if (int.TryParse(tokens[1], NumberStyles.Float, NumberFormatInfo.InvariantInfo, out time))
           {
-            chapters.Add(time/framesPerSecond);
+            chapters.Add(time / framesPerSecond);
           }
         }
 
@@ -2599,11 +2824,10 @@ namespace MediaPortal.Player
         return false;
       }
 
-      var nextChapter = NextChapterTime(Player.CurrentPosition);
-      Log.Debug("g_Player.JumpNextChapter() - Current Position: {0}, Next Chapter: {1}", Player.CurrentPosition,
-                nextChapter);
+      var nextChapter = NextChapterTime(_player.CurrentPosition);
+      Log.Debug("g_Player.JumpNextChapter() - Current Position: {0}, Next Chapter: {1}", _player.CurrentPosition, nextChapter);
 
-      if (nextChapter > 0 && nextChapter < Player.Duration)
+      if (nextChapter > 0 && nextChapter < _player.Duration)
       {
         SeekAbsolute(nextChapter);
         return true;
@@ -2619,11 +2843,10 @@ namespace MediaPortal.Player
         return false;
       }
 
-      var prevChapter = PreviousChapterTime(Player.CurrentPosition);
-      Log.Debug("g_Player.JumpPrevChapter() - Current Position: {0}, Previous Chapter: {1}", Player.CurrentPosition,
-                prevChapter);
+      var prevChapter = PreviousChapterTime(_player.CurrentPosition);
+      Log.Debug("g_Player.JumpPrevChapter() - Current Position: {0}, Previous Chapter: {1}", _player.CurrentPosition, prevChapter);
 
-      if (prevChapter >= 0 && prevChapter < Player.Duration)
+      if (prevChapter >= 0 && prevChapter < _player.Duration)
       {
         SeekAbsolute(prevChapter);
         return true;
@@ -2637,8 +2860,9 @@ namespace MediaPortal.Player
       try
       {
         if (_mediaInfo == null)
+        {
           _mediaInfo = new MediaInfoWrapper(fileName);
-
+        }
         var msg = new GUIMessage(GUIMessage.MessageType.GUI_MSG_CODEC_MISSING, 0, 0, 0, 0, 0, null)
                     {
                       Label = string.Format("{0}: {1}", GUILocalizeStrings.Get(1451), Path.GetFileName(fileName)),
@@ -2660,284 +2884,33 @@ namespace MediaPortal.Player
 
     private static bool CheckExtension(string filename)
     {
-      char[] splitter = {';'};
+      char[] splitter = { ';' };
       var extensions = _externalPlayerExtensions.Split(splitter);
+
       return extensions.Any(extension => extension.Trim().Equals(Path.GetExtension(filename), StringComparison.OrdinalIgnoreCase));
     }
-
-    #region Edition selection
-
-    /// <summary>
-    ///   Property which returns the total number of edition streams available
-    /// </summary>
-    public static int EditionStreams
-    {
-      get
-      {
-        return Player == null ? 0 : Player.EditionStreams;
-      }
-    }
-
-    /// <summary>
-    ///   Property to get/set the current edition stream
-    /// </summary>
-    public static int CurrentEditionStream
-    {
-      get
-      {
-        return Player == null ? 0 : Player.CurrentEditionStream;
-      }
-      set
-      {
-        if (Player != null)
-        {
-          Player.CurrentEditionStream = value;
-        }
-      }
-    }
-
-    public static string EditionLanguage(int iStream)
-    {
-      if (Player == null)
-      {
-        return Strings.Unknown;
-      }
-
-      var stream = Player.EditionLanguage(iStream);
-      return Util.Utils.TranslateLanguageString(stream);
-    }
-
-    /// <summary>
-    ///   Property to get the type of an edition stream
-    /// </summary>
-    public static string EditionType(int iStream)
-    {
-      if (Player == null)
-      {
-        return Strings.Unknown;
-      }
-
-      var stream = Player.EditionType(iStream);
-      return stream;
-    }
-
-    #endregion
-
-    #region Video selection
-
-    /// <summary>
-    ///   Property which returns the total number of video streams available
-    /// </summary>
-    public static int VideoStreams
-    {
-      get
-      {
-        return Player == null ? 0 : Player.VideoStreams;
-      }
-    }
-
-    /// <summary>
-    ///   Property to get/set the current video stream
-    /// </summary>
-    public static int CurrentVideoStream
-    {
-      get
-      {
-        return Player == null ? 0 : Player.CurrentVideoStream;
-      }
-      set
-      {
-        if (Player != null)
-        {
-          Player.CurrentVideoStream = value;
-        }
-      }
-    }
-
-    public static string VideoLanguage(int iStream)
-    {
-      if (Player == null)
-      {
-        return Strings.Unknown;
-      }
-
-      var stream = Player.VideoLanguage(iStream);
-      return Util.Utils.TranslateLanguageString(stream);
-    }
-
-    /// <summary>
-    ///   Property to get the type of an edition stream
-    /// </summary>
-    public static string VideoType(int iStream)
-    {
-      if (Player == null)
-      {
-        return Strings.Unknown;
-      }
-
-      var stream = Player.VideoType(iStream);
-      return stream;
-    }
-
-    #endregion
-
-    #region Postprocessing selection
-
-    /// <summary>
-    ///   Property which returns true if the player is able to perform postprocessing features
-    /// </summary>
-    public static bool HasPostprocessing
-    {
-      get
-      {
-        return Player != null && Player.HasPostprocessing;
-      }
-    }
-
-    #endregion
-
-    #region subtitle/audio stream selection
-
-    /// <summary>
-    ///   Property which returns the total number of audio streams available
-    /// </summary>
-    public static int AudioStreams
-    {
-      get
-      {
-        return Player == null ? 0 : Player.AudioStreams;
-      }
-    }
-
-    /// <summary>
-    ///   Property to get/set the current audio stream
-    /// </summary>
-    public static int CurrentAudioStream
-    {
-      get
-      {
-        return Player == null ? 0 : Player.CurrentAudioStream;
-      }
-      set
-      {
-        if (Player != null)
-        {
-          Player.CurrentAudioStream = value;
-        }
-      }
-    }
-
-    /// <summary>
-    ///   Property to get the total number of subtitle streams
-    /// </summary>
-    public static int SubtitleStreams
-    {
-      get
-      {
-        return Player == null ? 0 : Player.SubtitleStreams;
-      }
-    }
-
-    /// <summary>
-    ///   Property to get/set the current subtitle stream
-    /// </summary>
-    public static int CurrentSubtitleStream
-    {
-      get
-      {
-        return Player == null ? 0 : Player.CurrentSubtitleStream;
-      }
-      set
-      {
-        if (Player != null)
-        {
-          Player.CurrentSubtitleStream = value;
-        }
-      }
-    }
-
-    /// <summary>
-    ///   Property to get the name for an audio stream
-    /// </summary>
-    public static string AudioLanguage(int iStream)
-    {
-      if (Player == null)
-      {
-        return Strings.Unknown;
-      }
-
-      var stream = Player.AudioLanguage(iStream);
-      return Util.Utils.TranslateLanguageString(stream);
-    }
-
-    /// <summary>
-    ///   Property to get the type of an audio stream
-    /// </summary>
-    public static string AudioType(int iStream)
-    {
-      if (Player == null)
-      {
-        return Strings.Unknown;
-      }
-
-      var stream = Player.AudioType(iStream);
-      return stream;
-    }
-
-    /// <summary>
-    ///   Property to get/set the name for a subtitle stream
-    /// </summary>
-    public static string SubtitleLanguage(int iStream)
-    {
-      if (Player == null)
-      {
-        return Strings.Unknown;
-      }
-
-      var stream = Player.SubtitleLanguage(iStream);
-      return Util.Utils.TranslateLanguageString(stream);
-    }
-
-    /// <summary>
-    ///   Retrieves the name of the subtitle stream
-    /// </summary>
-    /// <param name="iStream"> Index of the stream </param>
-    /// <returns> Name of the track </returns>
-    public static string SubtitleName(int iStream)
-    {
-      if (Player == null)
-      {
-        return null;
-      }
-
-      var stream = Player.SubtitleName(iStream);
-      return Util.Utils.TranslateLanguageString(stream);
-    }
-
-    #endregion
 
     #endregion
 
     #region FullScreenWindow
 
-    #region Delegates
-
     public delegate bool ShowFullScreenWindowHandler();
-
-    #endregion
 
     private static ShowFullScreenWindowHandler _showFullScreenWindowTV = ShowFullScreenWindowTVDefault;
     private static ShowFullScreenWindowHandler _showFullScreenWindowVideo = ShowFullScreenWindowVideoDefault;
     private static ShowFullScreenWindowHandler _showFullScreenWindowOther = ShowFullScreenWindowOtherDefault;
 
     /// <summary>
-    ///   This handler gets called by ShowFullScreenWindow.
-    ///   It should handle Fullscreen-TV.
-    ///   By default, it is set to ShowFullScreenWindowTVDefault.
+    /// This handler gets called by ShowFullScreenWindow.
+    /// It should handle Fullscreen-TV.
+    /// By default, it is set to ShowFullScreenWindowTVDefault.
     /// </summary>
     public static ShowFullScreenWindowHandler ShowFullScreenWindowTV
     {
-      get { return _showFullScreenWindowTV; }
+      get
+      {
+        return _showFullScreenWindowTV;
+      }
       set
       {
         _showFullScreenWindowTV = value;
@@ -2946,9 +2919,9 @@ namespace MediaPortal.Player
     }
 
     /// <summary>
-    ///   This handler gets called by ShowFullScreenWindow.
-    ///   It should handle general Fullscreen-Video.
-    ///   By default, it is set to ShowFullScreenWindowVideoDefault.
+    /// This handler gets called by ShowFullScreenWindow.
+    /// It should handle general Fullscreen-Video.
+    /// By default, it is set to ShowFullScreenWindowVideoDefault.
     /// </summary>
     public static ShowFullScreenWindowHandler ShowFullScreenWindowVideo
     {
@@ -2964,9 +2937,9 @@ namespace MediaPortal.Player
     }
 
     /// <summary>
-    ///   This handler gets called by ShowFullScreenOther.
-    ///   It should handle general Fullscreen.
-    ///   By default, it is set to ShowFullScreenWindowOtherDefault.
+    /// This handler gets called by ShowFullScreenOther.
+    /// It should handle general Fullscreen.
+    /// By default, it is set to ShowFullScreenWindowOtherDefault.
     /// </summary>
     public static ShowFullScreenWindowHandler ShowFullScreenWindowOther
     {
@@ -2982,12 +2955,12 @@ namespace MediaPortal.Player
     }
 
     /// <summary>
-    ///   The default handler does only work if a player is active.
-    ///   However, GUITVHome and TvPlugin.TVHOME, both set their
-    ///   own hook to enable fullscreen tv for non-player live
-    ///   TV.
+    /// The default handler does only work if a player is active.
+    /// However, GUITVHome and TvPlugin.TVHOME, both set their
+    /// own hook to enable fullscreen TV for non-player live
+    /// TV.
     /// </summary>
-    /// <returns> </returns>
+    /// <returns></returns>
     public static bool ShowFullScreenWindowTVDefault()
     {
       if (Playing && IsTV && !IsTVRecording)
@@ -2997,12 +2970,12 @@ namespace MediaPortal.Player
         GUIGraphicsContext.OnAction(actionCloseDialog);
 
         // watching TV
-        if (GUIWindowManager.ActiveWindow == (int) GUIWindow.Window.WINDOW_TVFULLSCREEN)
+        if (GUIWindowManager.ActiveWindow == (int)GUIWindow.Window.WINDOW_TVFULLSCREEN)
         {
           return true;
         }
         Log.Info("g_Player: ShowFullScreenWindow switching to fullscreen tv");
-        GUIWindowManager.ActivateWindow((int) GUIWindow.Window.WINDOW_TVFULLSCREEN);
+        GUIWindowManager.ActivateWindow((int)GUIWindow.Window.WINDOW_TVFULLSCREEN);
         GUIGraphicsContext.IsFullScreenVideo = true;
         return true;
       }
@@ -3018,36 +2991,36 @@ namespace MediaPortal.Player
       // are we playing music and got the fancy BassMusicPlayer?
       if (IsMusic && BassMusicPlayer.IsDefaultMusicPlayer)
       {
-        if (GUIWindowManager.ActiveWindow == (int) GUIWindow.Window.WINDOW_FULLSCREEN_MUSIC)
+        if (GUIWindowManager.ActiveWindow == (int)GUIWindow.Window.WINDOW_FULLSCREEN_MUSIC)
         {
           return true;
         }
 
-        // When we don't have any visualization, switch to Now Playing, instead of showing a black screen
+        // When we don't have any Visualization, switch to Now Playing, instead of showing a black screen
         if (BassMusicPlayer.Player.IVizManager.CurrentVisualizationType == VisualizationInfo.PluginType.None)
         {
-          if (GUIWindowManager.ActiveWindow == (int) GUIWindow.Window.WINDOW_MUSIC_PLAYING_NOW)
+          if (GUIWindowManager.ActiveWindow == (int)GUIWindow.Window.WINDOW_MUSIC_PLAYING_NOW)
           {
             return true;
           }
 
-          Log.Info("g_Player: ShowFullScreenWindow: No Visualization defined. Switching to Now Playing");
-          GUIWindowManager.ActivateWindow((int) GUIWindow.Window.WINDOW_MUSIC_PLAYING_NOW);
+          Log.Info("g_Player: ShowFullScreenWindow: No Visualisation defined. Switching to Now Playing");
+          GUIWindowManager.ActivateWindow((int)GUIWindow.Window.WINDOW_MUSIC_PLAYING_NOW);
           BassMusicPlayer.Player.VisualizationWindow.Size = new Size(1, 1); // Hide the Vis Window
           return true;
         }
 
         Log.Info("g_Player: ShowFullScreenWindow switching to fullscreen music");
-        GUIWindowManager.ActivateWindow((int) GUIWindow.Window.WINDOW_FULLSCREEN_MUSIC);
+        GUIWindowManager.ActivateWindow((int)GUIWindow.Window.WINDOW_FULLSCREEN_MUSIC);
       }
       else
       {
-        if (GUIWindowManager.ActiveWindow == (int) GUIWindow.Window.WINDOW_FULLSCREEN_VIDEO)
+        if (GUIWindowManager.ActiveWindow == (int)GUIWindow.Window.WINDOW_FULLSCREEN_VIDEO)
         {
           return true;
         }
         Log.Info("g_Player: ShowFullScreenWindow switching to fullscreen video");
-        GUIWindowManager.ActivateWindow((int) GUIWindow.Window.WINDOW_FULLSCREEN_VIDEO);
+        GUIWindowManager.ActivateWindow((int)GUIWindow.Window.WINDOW_FULLSCREEN_VIDEO);
       }
       GUIGraphicsContext.IsFullScreenVideo = true;
       return true;
@@ -3059,19 +3032,19 @@ namespace MediaPortal.Player
     }
 
     /// <summary>
-    ///   This function opens a fullscreen window for the current
-    ///   player. It returns whether a fullscreen window could
-    ///   be opened.
+    /// This function opens a fullscreen window for the current
+    /// player. It returns whether a fullscreen window could
+    /// be opened.
     /// 
-    ///   It tries the three handlers in this order:
-    ///   - ShowFullScreenWindowTV
-    ///   - ShowFullScreenWindowVideo
-    ///   - ShowFullScreenWindowOther
+    /// It tries the three handlers in this order:
+    ///  - ShowFullScreenWindowTV
+    ///  - ShowFullScreenWindowVideo
+    ///  - ShowFullScreenWindowOther
     /// 
-    ///   The idea is to have a central location for deciding what window to
-    ///   open for fullscreen.
+    /// The idea is to have a central location for deciding what window to
+    /// open for fullscreen.
     /// </summary>
-    /// <returns> </returns>
+    /// <returns></returns>
     public static bool ShowFullScreenWindow()
     {
       Log.Debug("g_Player: ShowFullScreenWindow");
