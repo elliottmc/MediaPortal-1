@@ -371,21 +371,20 @@ public class MediaPortalApp : D3DApp, IRender
         mpWatchDog.Start();
       }
 #endif
-      //Log MediaPortal version build and operating system level
+      // Log MediaPortal version build and operating system level
       var versionInfo = FileVersionInfo.GetVersionInfo(Application.ExecutablePath);
 
-      Log.Info("Main: MediaPortal v" + versionInfo.FileVersion + " is starting up on " +
-               OSInfo.OSInfo.GetOSDisplayVersion());
+      Log.Info("Main: MediaPortal v" + versionInfo.FileVersion + " is starting up on " + OSInfo.OSInfo.GetOSDisplayVersion());
 #if DEBUG
       Log.Info("Debug build: " + Application.ProductVersion);
 #else
       Log.Info("Build: " + Application.ProductVersion);
 #endif
 
-      //Check for unsupported operating systems
+      // Check for unsupported operating systems
       OSPrerequisites.OSPrerequisites.OsCheck(false);
 
-      //Log last install of WindowsUpdate patches
+      // Log last install of WindowsUpdate patches
       var lastSuccessTime = "NEVER !!!";
       UIntPtr res;
 
@@ -422,14 +421,14 @@ public class MediaPortalApp : D3DApp, IRender
       }
       Log.Info("Main: Last install from WindowsUpdate is dated {0}", lastSuccessTime);
 
-      //Disable "ghosting" for WindowsVista and up
+      // Disable "ghosting" for WindowsVista and up
       if (OSInfo.OSInfo.VistaOrLater())
       {
         Log.Debug("Disabling process window ghosting");
         NativeMethods.DisableProcessWindowsGhosting();
       }
 
-      //Start MediaPortal
+      // Start MediaPortal
       Log.Info("Main: Using Directories:");
       foreach (Config.Dir option in Enum.GetValues(typeof (Config.Dir)))
       {
@@ -446,7 +445,7 @@ public class MediaPortalApp : D3DApp, IRender
         }
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
-        //Set current directory
+        // Set current directory
         var applicationPath = Application.ExecutablePath;
         applicationPath = Path.GetFullPath(applicationPath);
         applicationPath = Path.GetDirectoryName(applicationPath);
@@ -604,13 +603,12 @@ public class MediaPortalApp : D3DApp, IRender
             }
 #endif
             var strLine = "Please install Windows Media Player " + windowsMediaPlayerVersion + "\r\n";
-            strLine = strLine + "MediaPortal cannot run without Windows Media Player " + windowsMediaPlayerVersion;
+            strLine    +=  "MediaPortal cannot run without Windows Media Player " + windowsMediaPlayerVersion;
             MessageBox.Show(strLine, "MediaPortal", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            //return;
           }
 
 #if !DEBUG
-  // Check TvPlugin version
+          // Check TvPlugin version
           var exe = Assembly.GetExecutingAssembly().Location;
           var tvPlugin = Config.GetFolder(Config.Dir.Plugins) + "\\Windows\\TvPlugin.dll";
           if (File.Exists(tvPlugin) && !_avoidVersionChecking)
@@ -638,7 +636,7 @@ public class MediaPortalApp : D3DApp, IRender
         catch (Exception)
         {
         }
-        //following crashes on some pc's, dunno why
+        //following crashes on some PCs, dunno why
         //Log.Info("  Stop any known recording processes");
         //Utils.KillExternalTVProcesses();
 #if !DEBUG
@@ -655,8 +653,6 @@ public class MediaPortalApp : D3DApp, IRender
         Log.Debug("Main: Initializing DirectX");
         if (app.CreateGraphicsSample())
         {
-          IMessageFilter filter = new ThreadMessageFilter(app);
-          Application.AddMessageFilter(filter);
           // Initialize Input Devices
           if (_splashScreen != null)
           {
@@ -672,18 +668,14 @@ public class MediaPortalApp : D3DApp, IRender
             app.Focus();
             Debug.WriteLine("after Application.Run");
           }
-            //#if !DEBUG
+          //#if !DEBUG
           catch (Exception ex)
           {
             Log.Error(ex);
             Log.Error("MediaPortal stopped due to an exception {0} {1} {2}", ex.Message, ex.Source, ex.StackTrace);
             _mpCrashed = true;
           }
-            //#endif
-          finally
-          {
-            Application.RemoveMessageFilter(filter);
-          }
+          //#endif
           app.OnExit();
         }
 #if !DEBUG
@@ -706,9 +698,8 @@ public class MediaPortalApp : D3DApp, IRender
 
         if (autoHideTaskbar)
         {
-          // only re-show the startbar if MP is the one that has hidden it.
-          Win32API.EnableStartBar(true);
-          Win32API.ShowStartBar(true);
+          // only re-show the task bar if MP is the one that has hidden it.
+          HideTaskBar(false);
         }
         if (_useRestartOptions)
         {
@@ -1433,13 +1424,14 @@ public class MediaPortalApp : D3DApp, IRender
 
   #endregion
 
-  // Trap the OnShown event so we can hide the window if the mimimize on startup option is set
+  // Trap the OnShown event so we can hide the window if the minimize on startup option is set
   protected override void OnShown(EventArgs e)
   {
     if (MinimizeOnStartup && FirstTimeWindowDisplayed)
     {
       FirstTimeWindowDisplayed = false;
-      DoMinimizeOnStartup();
+      Log.Info("d3dapp: Minimizing to tray on startup");
+      MinimizeToTray(true);
     }
     base.OnShown(e);
   }
